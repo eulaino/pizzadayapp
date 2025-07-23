@@ -1,0 +1,41 @@
+/* Para o background do ion-content */
+ion-content.bg-light {
+  --background: #f8daa3; /* mantém seu background */
+}
+
+/* Ajustes para a linha e texto */
+.line-text {
+  padding: 2px;
+  height: 20px;
+  margin-top: 40px;
+}
+
+.lines {
+  height: 1px;
+  background: #858585;
+  display: block;
+}
+
+.text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #e0dfe6;
+  padding: 0 15px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #5e5e5e;
+}
+
+.socials{
+  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+  gap: 12px;
+
+  i{
+    font-size: 18px;
+  }
+}

@@ -1,0 +1,41 @@
+<!--<ion-header>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-danger shadow-sm px-3">
+    <span class="navbar-brand mx-auto fw-bold fs-5">🍕 PizzaDay 2.0</span>
+  </nav>
+</ion-header>-->
+
+<ion-content fullscreen class="bg-gradient d-flex align-items-center justify-content-center">
+  
+  <div class="container d-flex align-items-center justify-content-center" style="min-height: 100vh;">
+    <div class="bg-white p-4 rounded-4 shadow w-100 mx-auto"
+      style="max-width: 420px; font-family: 'Inter', sans-serif;">
+      <h2 class="text-center fw-bold text-black mb-4">🍕 PizzaDay</h2>
+
+      <!-- ID da Sessão -->
+      <div class="mb-3">
+        <label for="sessionId" class="form-label">ID da Sessão</label>
+        <div class="input-group">
+          <input id="sessionId" [(ngModel)]="sessionId" class="form-control" placeholder="Ex: pizza-party-123" />
+          <button (click)="generateId()" class="btn btn-outline-danger">Gerar ID</button>
+        </div>
+      </div>
+
+      <!-- Nome do Usuário -->
+      <div class="mb-4">
+        <label for="username" class="form-label">Seu Nome</label>
+        <input id="username" [(ngModel)]="username" class="form-control" placeholder="Ex: João" />
+      </div>
+
+      <!-- Botão Entrar -->
+      <button (click)="joinSession()" class="btn btn-danger w-100 fw-semibold">
+        Entrar na Sessão
+      </button>
+
+      <!-- Mensagem de erro ou sucesso -->
+      <div *ngIf="errorMessage" class="alert alert-danger mt-3 p-2 text-center" role="alert">
+        {{ errorMessage }}
+      </div>
+    </div>
+  </div>
+
+</ion-content>

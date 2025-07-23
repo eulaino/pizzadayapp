@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PizzaDayApp</string>
+    <string name="title_activity_main">PizzaDayApp</string>
+    <string name="package_name">com.pizzaday.app</string>
+    <string name="custom_url_scheme">com.pizzaday.app</string>
+</resources>

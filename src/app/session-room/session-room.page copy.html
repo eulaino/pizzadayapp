@@ -1,0 +1,108 @@
+<!--<ion-header>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-danger shadow-sm px-3">
+    <span class="navbar-brand mx-auto fw-bold fs-5">🍕 PizzaDay 2.0</span>
+  </nav>
+</ion-header>-->
+
+<ion-content fullscreen class="p-4 bg-light">
+  <div class="container my-4" style="font-family: 'Inter', sans-serif; max-width: 600px;">
+
+    <!-- Sessão Info -->
+    <!--<div class="card shadow mb-4 animate__animated animate__fadeInUp">
+      <div class="card-body text-center">
+        <p class="text-muted mb-1">Sessão Atual:</p>
+        <h4 class="fw-bold text-danger">{{ roomId }}</h4>
+        <p *ngIf="isHost" class="text-warning mt-2 fw-medium">
+          Você é o <strong>HOST</strong> desta sessão!
+        </p>
+      </div>
+    </div>-->
+
+    <!-- Participantes -->
+    <div class="card shadow mb-4 animate__animated animate__fadeInUp">
+      <div class="card-header bg-light fw-bold">Participantes</div>
+      <div class="card-body p-3">
+        <div *ngIf="participants.length > 0; else noParticipants">
+          <ul class="list-group list-group-flush">
+            <li *ngFor="let p of participants"
+              class="list-group-item d-flex justify-content-between align-items-center">
+              <div>
+                <strong>{{ p.author }}</strong>
+                <span *ngIf="p.isHost" class="badge bg-warning ms-2 fw-bold">
+                  Host
+                </span>
+              </div>
+              <div class="d-flex justify-content-between" style="gap: 10px">
+                <span class="badge bg-danger">{{ p.pizza }} fatias</span>
+                <span class="badge bg-danger"><a (click)="hostRemoveSlice()" *ngIf="isHost">Remover Fatia</a></span>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <ng-template #noParticipants>
+          <p class="text-muted text-center mb-0">Nenhum participante ainda.</p>
+        </ng-template>
+      </div>
+
+    </div>
+
+    <!-- Seu Consumo -->
+    <div class="card shadow mb-4 text-center animate__animated animate__fadeInUp">
+      <div class="card-header fw-bold bg-light">Seu Consumo</div>
+      <div class="card-body">
+        <p class="text-muted">Você comeu:</p>
+        <div class="d-flex justify-content-center align-items-center gap-3 my-2">
+          <button (click)="removeMySlice()" class="btn btn-outline-danger rounded-circle fs-4" disabled>−</button>
+
+          <!-- Aqui aplicamos a animação pulse condicionalmente -->
+          <span class="fs-1 fw-bold text-danger animate__animated" [class.animate__pulse]="pulse">
+            {{ pizzaSlices }}
+          </span>
+
+          <button (click)="addSlice()" class="btn btn-outline-success rounded-circle fs-4">+</button>
+        </div>
+        <p class="text-muted mt-3 mb-1">Valor a pagar:</p>
+        <h5 class="text-danger fw-bold">{{ getFormattedShare() }}</h5>
+      </div>
+    </div>
+
+
+    <!-- Total da Sessão -->
+    <div class="card shadow mb-4 text-center animate__animated animate__fadeInUp">
+      <div class="card-header fw-bold bg-light">Total da Sessão</div>
+      <div class="card-body">
+        <p class="text-muted mb-1">Fatias totais consumidas:</p>
+        <h5 class="fw-bold">{{ getTotalSlices() }} fatias</h5>
+        <p class="text-muted mt-3 mb-1">Valor total arrecadado:</p>
+        <h5 class="text-success fw-bold">{{ getFormattedTotal() }}</h5>
+        <button (click)="leaveSession()" class="btn btn-danger w-100 mt-4 animate__animated animate__fadeInUp">
+          Sair da Sessão
+        </button>
+      </div>
+    </div>
+
+    <!-- Controles do Host -->
+    <!--<div *ngIf="isHost" class="card shadow mb-4 animate__animated animate__fadeInUp">
+      <div class="card-header fw-bold bg-light">Controles do Host</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label for="selectParticipant" class="form-label">Remover fatia de:</label>
+          <select id="selectParticipant" class="form-select" [(ngModel)]="selectedParticipantToRemove">
+            <option value="">Selecione um participante</option>
+            <option *ngFor="let p of participants" [value]="p.author">
+              {{ p.author }} ({{ p.pizza }} fatias)
+            </option>
+          </select>
+        </div>
+        <button (click)="hostRemoveSlice()" [disabled]="!selectedParticipantToRemove" class="btn btn-warning w-100">
+          Remover Fatias (Host)
+        </button>
+      </div>
+    </div>-->
+
+    <!-- Sair da Sessão -->
+    <!--<button (click)="leaveSession()" class="btn btn-danger w-100 mb-4 animate__animated animate__fadeInUp">
+      Sair da Sessão
+    </button>-->
+  </div>
+</ion-content>
