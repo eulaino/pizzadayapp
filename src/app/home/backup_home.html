@@ -1,0 +1,61 @@
+<ion-content class="bg-light">
+  <div id="header" class="bg-gradient-to-br from-red-500 to-yellow-500 text-white rounded-bottom d-flex flex-column" style="height: 50%;">
+
+    <div id="app-bar" class="d-flex justify-content-between align-items-center px-3" style="height: 60px;">
+      <ion-icon name="arrow-back" style="font-size: 24px;"></ion-icon>
+      <!-- Se quiser adicionar mais ícones ou botões à direita, coloque aqui -->
+    </div>
+
+    <div id="logo" class="bg-white rounded d-flex justify-content-center align-items-center mx-auto mt-5"
+      style="width: 100px; height: 100px;">
+      <img src="assets/logo.png" alt="Logo" class="img-fluid" style="width: 70%;" />
+    </div>
+
+    <h2 class="text-center fw-bold mt-2" style="font-size: 20px; letter-spacing: 1px;">PIZZADAY</h2>
+  </div>
+
+  <div class="card mx-3 position-absolute start-0 end-0" style="top: 37%; border-radius: 20px; box-shadow: none;">
+    <div class="card-body px-4 py-4 text-center">
+
+      <div class="mb-3">
+        <h1 class="fw-bold fs-5 mb-1">Seja Bem-vindo(a)</h1>
+      </div>
+      <!--<p class="fs-6 mb-4">Fazendo um teste...</p>-->
+
+      <div class="mb-4">
+        <label for="username" class="text-gray-700 text-lg font-medium">Seu Nome:</label>
+        <input id="username" [(ngModel)]="username" class="form-control" placeholder="Ex: João" />
+      </div>
+
+      <div class="mb-4">
+        <label for="username" class="text-gray-700 text-lg font-medium">Digite o ID da Sala:</label>
+      <input id="sessionId" [(ngModel)]="sessionId" type="text" class="form-control mb-3"
+        placeholder="Ex: pizza-party-123" />
+      </div>
+
+
+      <button (click)="joinSession()" class="w-full bg-red-600 text-white px-6 rounded-xl text-lg font-semibold hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg mb-2"
+      style="height: 40px;">
+        Entrar</button>
+
+      <button (click)="generateId()" class="w-full h-10 text-base font-normal capitalize border border-red-600 text-red-600 hover:bg-red-600 hover:text-white transition duration-150 ease-in-out"
+>Gerar ID</button>
+
+      <div class="line-text position-relative mt-4" style="height: 20px;">
+        <span class="lines position-absolute top-50 start-0 w-100 border-top border-secondary"></span>
+        <span
+          class="text position-absolute top-50 start-50 translate-middle bg-white px-3 fs-8 fw-semibold text-secondary">Ou
+          conectar usando</span>
+      </div>
+
+      <div class="socials">
+        <i class="bi bi-qr-code" style="color: #f59e0b"></i>
+        <i class="bi bi-share" style="color: #f59e0b"></i>
+      </div>
+
+      <div *ngIf="errorMessage" class="alert alert-danger mt-3 p-2 text-center" role="alert">
+        {{ errorMessage }}
+      </div>
+    </div>
+  </div>
+</ion-content>

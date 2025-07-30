@@ -4,6 +4,10 @@ import { SocketService, Participant } from '../services/socket.service';
 import { AlertController, NavController } from '@ionic/angular';
 import { Subscription } from 'rxjs';
 import { ChangeDetectorRef } from '@angular/core';
+import { ZXingScannerModule } from '@zxing/ngx-scanner';
+import { QRCodeComponent } from 'angularx-qrcode';
+import { BarcodeFormat } from '@zxing/library';
+
 
 import { CommonModule } from '@angular/common'; // Para *ngIf, *ngFor
 import { FormsModule } from '@angular/forms'; // Para [(ngModel)]
@@ -40,6 +44,8 @@ import {
     FormsModule,
     IonHeader,
     IonToolbar,
+    QRCodeComponent,
+    ZXingScannerModule,
     IonTitle,
     IonContent,
     IonButtons,
@@ -67,12 +73,20 @@ export class SessionRoomPage implements OnInit, OnDestroy {
   isHost: boolean = false;
   participants: Participant[] = [];
   selectedParticipantToRemove: string = '';
+  pulse = false;
+  animatePop = false;
+
+  triggerPulse() {
+    this.pulse = false;
+    setTimeout(() => {
+      this.pulse = true;
+    }, 10);
+  }
 
   readonly valorTotalPizza: number = 150;
 
   private subscriptions: Subscription = new Subscription();
 
-  pulse = false; // flag para controle da animação
 
   constructor(
     private router: Router,
@@ -168,6 +182,15 @@ export class SessionRoomPage implements OnInit, OnDestroy {
   }
 
   addSlice() {
+    this.animatePop = false;
+        setTimeout(() => {
+      this.animatePop = true;
+
+      // Remove novamente depois da animação (~300ms) para permitir reutilização
+      setTimeout(() => {
+        this.animatePop = false;
+      }, 300); // corresponde à duração da animação CSS
+    }, 10);
     /*setTimeout(() => {
       this.pizzaSlices++;
       this.socketService.sendMessage(this.username, this.pizzaSlices, this.roomId);
@@ -201,13 +224,7 @@ export class SessionRoomPage implements OnInit, OnDestroy {
     }
   }
 
-  triggerPulse() {
-    this.pulse = false;
-    setTimeout(() => {
-      this.pulse = true;
-      this.cdr.detectChanges();
-    }, 10);
-  }
+
 
   hostRemoveSlice() {
     if (!this.isHost) {

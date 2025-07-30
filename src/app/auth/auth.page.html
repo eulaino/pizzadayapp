@@ -1,0 +1,19 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Entrar</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-item>
+    <ion-label position="stacked">Usuário</ion-label>
+    <ion-input [(ngModel)]="username"></ion-input>
+  </ion-item>
+
+  <ion-item>
+    <ion-label position="stacked">Sala (roomId)</ion-label>
+    <ion-input [(ngModel)]="roomId"></ion-input>
+  </ion-item>
+
+  <ion-button expand="full" (click)="login()">Entrar</ion-button>
+</ion-content>

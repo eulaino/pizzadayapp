@@ -19,7 +19,7 @@ export class SocketService {
   // URL do seu servidor Node.js.
   // Se estiver rodando localmente, pode ser 'http://localhost:3000'.
   // Se estiver usando ngrok, use a URL HTTPS gerada por ele.
-  private readonly SOCKET_URL = 'https://28adb769a6d3.ngrok-free.app'; // <-- ATUALIZE ESTA LINHA
+  private readonly SOCKET_URL = 'https://89aff07f540a.ngrok-free.app'; // <-- ATUALIZE ESTA LINHA
   public currentRoomId: string | null = null;
   public currentUsername: string | null = null;
 

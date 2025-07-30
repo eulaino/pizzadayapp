@@ -1,88 +1,87 @@
-<ion-content class="bg-light">
-  <div id="header" class="bg-gradient text-white rounded-bottom d-flex flex-column" style="height: 50%;">
+<ion-content class="bg-light flex items-center justify-center">
+  <div class="bg-white p-8 rounded-2xl shadow-2xl w-[90%] max-w-md mx-auto transform transition-all duration-300 mt-4 mb-4">
+    <h1 class="text-4xl font-extrabold text-center text-gray-800 mb-8"> 🍕 PizzaDay 2.0 </h1>
+    <!-- Controle da Sessão -->
+    <div class="space-y-6" *ngIf="roomId">
+      <div class="text-center">
+        <p class="text-gray-600 text-lg font-medium mb-2">
+          Sessão Atual: <span class="font-bold text-red-600">{{ roomId }}</span>
+        </p>
+        <p class="text-yellow-600 text-md font-semibold" *ngIf="isHost">
+          Você é o <strong>HOST</strong> desta sessão!
+        </p>
+      </div>
 
-    <div id="app-bar" class="d-flex justify-content-between align-items-center px-3" style="height: 60px;">
-      <ion-icon name="arrow-back" style="font-size: 24px;"></ion-icon>
-      <!-- Se quiser adicionar mais ícones ou botões à direita, coloque aqui -->
-    </div>
+      <!-- Participantes -->
+      <div class="bg-red-50 p-4 rounded-xl shadow-inner">
+        <h2 class="text-xl font-bold text-gray-800 mb-3">Participantes:</h2>
+        <ul class="list-disc list-inside text-gray-700 text-base space-y-1"
+          *ngIf="participants.length > 0; else noParticipants">
+          <li *ngFor="let p of participants">{{ p.author }} - {{ p.pizza }} fatias <span *ngIf="p.isHost">(Host)</span>
+          </li>
+        </ul>
+        <ng-template #noParticipants>
+          <p class="text-gray-500">Nenhum participante encontrado.</p>
+        </ng-template>
+      </div>
 
-    <div id="logo" class="bg-white rounded d-flex justify-content-center align-items-center mx-auto mt-5"
-      style="width: 100px; height: 100px;">
-      <img src="assets/logo.png" alt="Logo" class="img-fluid" style="width: 70%;" />
-    </div>
+      <!-- Controle de Fatias -->
+      <div class="flex flex-col items-center justify-center bg-yellow-50 p-6 rounded-xl shadow-inner">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Suas Fatias de Pizza:</h2>
+        <div class="flex items-center space-x-4">
+          <button (click)="removeMySlice()" [disabled]="!isHost && pizzaSlices <= 0"
+            class="bg-red-500 text-white text-4xl font-bold w-16 h-16 rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-all duration-200 disabled:opacity-50">
+            −
+          </button>
 
-    <h2 class="text-center fw-bold mt-2" style="font-size: 20px; letter-spacing: 1px;">PIZZADAY</h2>
-  </div>
+          <span class="text-6xl font-extrabold text-red-700" [class.animate-popIn]="animatePop">
+            {{ pizzaSlices }}
+          </span>
 
-  <!-- CARD PARTCIPANTES -->
-  <div class="card mx-3 position-absolute start-0 end-0" style="top: 37%; border-radius: 20px; box-shadow: none;">
-    <div class="card-header text-center fw-bold" style="background: #faebb8; border-top-left-radius: 20px;border-top-right-radius: 20px;">
-      Participantes</div>
-    <div class="card-body px-4 py-4">
-      <!--<p class="fs-6 mb-4">Fazendo um teste...</p>-->
-
-      <div class="mb-4">
-        <div class="card-body p-3">
-          <div *ngIf="participants.length > 0; else noParticipants">
-            <ul class="list-group list-group-flush">
-              <li *ngFor="let p of participants"
-                class="list-group-item d-flex justify-content-between align-items-center flex-wrap">
-
-                <div class="d-flex align-items-center gap-3 flex-grow-1 flex-wrap">
-                  <strong>{{ p.author }}</strong>
-                </div>
-
-                <div class="d-flex align-items-center gap-2 flex-wrap mt-2 mt-md-0">
-                  <span *ngIf="p.isHost" class="badge text-dark fw-bold" style="background-color: 	#ff9100;">Host</span>
-                  <span *ngIf="!p.isHost" class="badge text-dark fw-bold" style="background: #ffbb00;">User</span>
-                  <span class="badge bg-danger">{{ p.pizza }} fatias</span>
-                  <span class="badge bg-danger">
-                    <a (click)="hostRemoveSlice()" *ngIf="isHost"
-                      style="cursor: pointer; color: white; text-decoration: none;">
-                      Remover Fatia
-                    </a>
-                  </span>
-                </div>
-
-              </li>
-            </ul>
-          </div>
-          <ng-template #noParticipants>
-            <p class="text-muted text-center mb-0">Nenhum participante ainda.</p>
-          </ng-template>
+          <button (click)="addSlice()"
+            class="bg-green-500 text-white text-4xl font-bold w-16 h-16 rounded-full flex items-center justify-center shadow-lg hover:bg-green-600 transition-all duration-200">
+            +
+          </button>
         </div>
       </div>
 
+      <!-- Controles do Host -->
+      <!--<div class="mt-4" *ngIf="isHost && participants.length > 1">
+        <h3 class="text-lg font-bold text-gray-800 mb-2">Controles do Host:</h3>
+        <label class="block text-gray-700 text-md font-medium mb-2">Remover fatia de:</label>
+        <div class="flex gap-2">
+          <select [(ngModel)]="selectedParticipantToRemove"
+            class="flex-grow p-3  border border-gray-300 rounded-xl text-lg">
+            <option *ngFor="let p of participants" [value]="p.author">{{ p.author }}</option>
+          </select>
+          <button (click)="hostRemoveSlice()"
+            class="bg-red-600 text-white py-3 px-4 h-16 rounded-xl text-lg font-semibold hover:bg-red-700 transition-all duration-200">
+            Remover Fatias
+          </button>
+        </div>
+      </div>-->
 
+      <!-- Valor a pagar + Sair -->
+      <div class="text-center">
+        <p class="text-gray-600 text-lg font-medium mb-2">
+          Valor a pagar: <span class="font-bold text-red-600">{{ getFormattedTotal()}}</span>
+        </p>
+        <button (click)="leaveSession()"
+          class="w-full mt-6 bg-gray-300 text-gray-800 py-2 px-4 rounded-xl text-md font-semibold hover:bg-gray-400 transition-all duration-200">
+          Sair da Sessão
+        </button>
 
+        <!-- QR CODE -->
+
+        <div *ngIf="roomId && isHost" class="mt-4">
+          <h5 class="mb-2 text-secondary">Compartilhe o QR Code:</h5>
+          <div class="d-flex justify-content-center align-items-center">
+            <qrcode [qrdata]="'https://89aff07f540a.ngrok-free.app/join/' + roomId" [width]="180"
+              [errorCorrectionLevel]="'M'"></qrcode>
+          </div>
+        </div>
+        <!-- FIM QR CODE -->
+      </div>
     </div>
   </div>
-
-  <div class="container">
-      <div class="card mx-3 position-absolute start-0 end-0" style="top: 65%; border-radius: 20px; box-shadow: none;">
-    <div class="card-header text-center" style="background: #faebb8; border-top-left-radius: 20px;border-top-right-radius: 20px;">Controle</div>
-    <div class="card-body px-4 py-4">
-      <!--<p class="fs-6 mb-4">Fazendo um teste...</p>-->
-
-      <div class="d-flex justify-content-center align-items-center gap-3 my-2 mb-4">
-        <button (click)="removeMySlice()" class="btn btn-outline-danger rounded-circle fs-4" disabled>−</button>
-
-        <!-- Aqui aplicamos a animação pulse condicionalmente -->
-        <span class="fs-1 fw-bold text-danger animate__animated" [class.animate__pulse]="pulse">
-          {{ pizzaSlices }}
-        </span>
-
-        <button (click)="addSlice()" class="btn btn-outline-success rounded-circle fs-4">+</button>
-      </div>
-
-      <div class="mb-4">
-        <button (click)="leaveSession()" class="btn w-100 mb-2" style="height: 40px; font-size: 16px; font-weight: 400; text-transform: none; color: white;
-      background: #f59e0b;">Sair da Sessão</button>
-      </div>
-
-
-    </div>
-  </div>
-  </div>
-
 </ion-content>
