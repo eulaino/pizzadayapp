@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { io, Socket } from 'socket.io-client';
-import { Observable, timeout } from 'rxjs';
+import { Observable } from 'rxjs';
 
 // Interface para um participante da sala.
 export interface Participant {
@@ -8,7 +8,7 @@ export interface Participant {
   pizza: number;
   isHost: boolean;
   roomId: string;
-  socketId?: string; // Opcional, usado apenas no backend, mas pode estar aqui para consistência..
+  socketId?: string;
 }
 
 @Injectable({
@@ -16,22 +16,20 @@ export interface Participant {
 })
 export class SocketService {
   private socket: Socket;
-  // URL do seu servidor Node.js.
-  // Se estiver rodando localmente, pode ser 'http://localhost:3000'.
-  // Se estiver usando ngrok, use a URL HTTPS gerada por ele.
-  private readonly SOCKET_URL = 'https://89aff07f540a.ngrok-free.app'; // <-- ATUALIZE ESTA LINHA
+  private readonly SOCKET_URL = 'https://87138696a2ea.ngrok-free.app';
   public currentRoomId: string | null = null;
   public currentUsername: string | null = null;
+  
+  public getSocket(): Socket {
+    return this.socket;
+  }
 
   constructor() {
-
-
     this.socket = io(this.SOCKET_URL, {
       transports: ['websocket']
     });
-    console.log(this.SOCKET_URL);
-
-    console.log('Tentando conectar ao socket em:', this.SOCKET_URL); 
+    
+    console.log('Tentando conectar ao socket em:', this.SOCKET_URL);
 
     this.socket.on('connect', () => {
       console.log('Conectado ao servidor Socket.IO com ID:', this.socket.id);
@@ -45,45 +43,55 @@ export class SocketService {
     this.socket.on('disconnect', (reason) => {
       console.warn('Desconectado:', reason);
     });
-
-    /*this.socket.on('connect', () => {
-      console.log('Conectado ao servidor Socket.IO!');
-      //CRIAR LOG
-    });
-    
-    this.socket.on('connect_error', (err) => {
-      console.log('Conectado ao servidor Socket.IO!', err.message);
-      //CRIAR LOG
-    });
-
-    this.socket.on('disconnect', (reason) => {
-      console.log('Desconectado do servidor Socket.IO!', reason);
-    });*/
-
   }
-
 
   // --- Métodos para Emitir Eventos (Enviar para o Servidor) ---
   emit(eventName: string, data?: any) {
-    console.log(`[SocketService] -> Emitindo '${eventName}' com dados:`, data); // Log detalhado
+    console.log(`[SocketService] -> Emitindo '${eventName}' com dados:`, data);
     this.socket.emit(eventName, data);
   }
 
-  joinRoom(roomId: string, username: string) {
-    // Evita entrar novamente se já estiver na sala correta com o mesmo nome
-    if (this.currentRoomId === roomId && this.currentUsername === username) {
-      console.log(`[SocketService] Já conectado à sala ${roomId} como ${username}, ignorando novo joinRoom.`);
+  // Método para verificar status de host
+  requestHostStatus(roomId: string, username?: string) {
+    const usernameToCheck = username || this.currentUsername;
+    if (usernameToCheck) {
+      console.log(`[SocketService] Solicitando verificação de host: Sala=${roomId}, Nome=${usernameToCheck}`);
+      this.emit('checkIfHost', { roomId, username: usernameToCheck });
+    } else {
+      console.warn('[SocketService] Username não disponível para verificação de host');
+    }
+  }
+
+  // Método para solicitar status da sala
+  requestRoomStatus(roomId: string) {
+    console.log(`[SocketService] Solicitando status da sala: ${roomId}`);
+    this.emit('requestRoomStatus', { roomId });
+  }
+
+  // Método para verificar se o usuário atual é host
+  checkCurrentUserHost(roomId: string) {
+    if (this.currentUsername) {
+      console.log(`[SocketService] Verificando se ${this.currentUsername} é host da sala ${roomId}`);
+      this.emit('checkCurrentUserHost', { roomId, username: this.currentUsername });
+    }
+  }
+
+  joinRoom(roomId: string, cpf: string) {
+    if (this.currentRoomId === roomId && this.currentUsername === cpf) {
+      console.log(`[SocketService] Já conectado à sala ${roomId} como ${cpf}, verificando status...`);
+      this.checkCurrentUserHost(roomId);
       return;
     }
 
     this.currentRoomId = roomId;
-    this.currentUsername = username;
+    this.currentUsername = cpf;
 
-    console.log(`[SocketService] Enviando joinRoom: Sala=${roomId}, Usuário=${username}`);
-    this.emit('joinRoom', { roomId, username });
+    console.log(`[SocketService] Enviando joinRoom: Sala=${roomId}, CPF=${cpf}`);
+    this.emit('joinRoom', { roomId, username: cpf });
   }
+  
   sendMessage(author: string, pizza: number, roomId: string) {
-    console.log(`[SocketService] Tentando sendMessage: Autor=${author}, Pizza=${pizza}, Sala=${roomId}`); // Mais detalhado
+    console.log(`[SocketService] Tentando sendMessage: Autor=${author}, Pizza=${pizza}, Sala=${roomId}`);
     this.emit('sendMessage', { author, pizza, roomId });
   }
 
@@ -103,13 +111,14 @@ export class SocketService {
       this.currentUsername = null;
     }
   }
+
   // --- Métodos para Ouvir Eventos (Receber do Servidor) ---
   listen(eventName: string): Observable<any> {
     return new Observable((subscriber) => {
-      this.socket.on(eventName, (data: any) => {
+      this.socket.on(eventName, (data?: any) => {
+        console.log(`[SocketService] <- Recebido '${eventName}':`, data);
         subscriber.next(data);
       });
-      // Retorna uma função de limpeza para desinscrever o listener
       return () => {
         this.socket.off(eventName);
       };
@@ -142,5 +151,39 @@ export class SocketService {
 
   onError(): Observable<string> {
     return this.listen('error');
+  }
+
+  // Novos listeners para resolver o problema do host
+  onRoomJoined(): Observable<{ roomId: string; participants: Participant[]; isHost?: boolean }> {
+    return this.listen('roomJoined');
+  }
+
+  onRoomStatusResponse(): Observable<{ roomId: string; participants: Participant[]; userIsHost: boolean }> {
+    return this.listen('roomStatusResponse');
+  }
+
+  onUserHostStatus(): Observable<{ roomId: string; username: string; isHost: boolean }> {
+    return this.listen('userHostStatus');
+  }
+
+  // Métodos utilitários
+  isConnected(): boolean {
+    return this.socket.connected;
+  }
+
+  reconnect() {
+    if (!this.socket.connected) {
+      console.log('[SocketService] Tentando reconectar...');
+      this.socket.connect();
+    }
+  }
+
+  getConnectionInfo() {
+    return {
+      connected: this.socket.connected,
+      currentRoomId: this.currentRoomId,
+      currentUsername: this.currentUsername,
+      socketId: this.socket.id
+    };
   }
 }

@@ -1,86 +1,420 @@
 <ion-content class="bg-light flex items-center justify-center">
-  <div class="bg-white p-8 rounded-2xl shadow-2xl w-[90%] max-w-md mx-auto transform transition-all duration-300 mt-4 mb-4">
-    <h1 class="text-4xl font-extrabold text-center text-gray-800 mb-8"> 🍕 PizzaDay 2.0 </h1>
-    <!-- Controle da Sessão -->
-    <div class="space-y-6" *ngIf="roomId">
+  <div class="bg-white p-6 rounded-2xl shadow-2xl w-[95%] max-w-lg mx-auto transform transition-all duration-300 mt-4">
+    <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-6"> 🍕 PizzaDay 2.0 </h1>
+    
+    <!-- Tela de Carregamento -->
+    <div *ngIf="isLoading" class="text-center py-8">
+      <div class="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <p class="text-gray-600">Conectando na sala...</p>
+      <p class="text-sm text-gray-500 mt-2">Sala: <strong>{{ roomId }}</strong></p>
+      <div class="mt-4 text-xs text-gray-400">
+        <p>Carregando configurações...</p>
+        <p>Sincronizando participantes...</p>
+      </div>
+    </div>
+    
+    <!-- Interface Principal (sempre visível após carregamento) -->
+    <div class="space-y-4" *ngIf="!isLoading">
+      
+      <!-- Cabeçalho da Sessão -->
       <div class="text-center">
         <p class="text-gray-600 text-lg font-medium mb-2">
-          Sessão Atual: <span class="font-bold text-red-600">{{ roomId }}</span>
+          Sessão: <span class="font-bold text-red-600">{{ roomId }}</span>
         </p>
         <p class="text-yellow-600 text-md font-semibold" *ngIf="isHost">
           Você é o <strong>HOST</strong> desta sessão!
         </p>
+        <div class="flex gap-2 justify-center mt-2">
+          <button *ngIf="isHost" (click)="endSession()"
+            class="bg-red-600 text-white py-1 px-3 rounded-lg text-sm font-medium hover:bg-red-700 transition-all duration-200">
+            Encerrar Sessão
+          </button>
+        </div>
       </div>
 
-      <!-- Participantes -->
-      <div class="bg-red-50 p-4 rounded-xl shadow-inner">
-        <h2 class="text-xl font-bold text-gray-800 mb-3">Participantes:</h2>
-        <ul class="list-disc list-inside text-gray-700 text-base space-y-1"
-          *ngIf="participants.length > 0; else noParticipants">
-          <li *ngFor="let p of participants">{{ p.author }} - {{ p.pizza }} fatias <span *ngIf="p.isHost">(Host)</span>
-          </li>
-        </ul>
-        <ng-template #noParticipants>
-          <p class="text-gray-500">Nenhum participante encontrado.</p>
+      <!-- Seção de Participantes (sempre visível) -->
+      <div class="bg-blue-50 p-4 rounded-xl shadow-inner">
+        <h2 class="text-lg font-bold text-gray-800 mb-3">👥 Participantes ({{ participants.length }}):</h2>
+        
+        <div *ngIf="participants.length > 0; else loadingParticipants">
+          <ul class="space-y-1">
+            <li *ngFor="let p of participants" class="flex justify-between items-center">
+              <span class="text-gray-700">
+                {{ p.author }}
+                <span *ngIf="p.isHost" class="text-yellow-600 font-bold ml-1">(Host)</span>
+                <span *ngIf="p.author === nome" class="text-blue-600 font-bold ml-1">(Você)</span>
+              </span>
+              <span class="font-bold text-blue-600">{{ getUserTotalSlicesForParticipant(p.author) }} fatias</span>
+            </li>
+          </ul>
+        </div>
+        
+        <ng-template #loadingParticipants>
+          <div class="text-center py-4">
+            <div class="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+            <p class="text-gray-500 text-sm">Carregando participantes...</p>
+          </div>
         </ng-template>
       </div>
 
-      <!-- Controle de Fatias -->
-      <div class="flex flex-col items-center justify-center bg-yellow-50 p-6 rounded-xl shadow-inner">
-        <h2 class="text-2xl font-bold text-gray-800 mb-4">Suas Fatias de Pizza:</h2>
-        <div class="flex items-center space-x-4">
-          <button (click)="removeMySlice()" [disabled]="!isHost && pizzaSlices <= 0"
-            class="bg-red-500 text-white text-4xl font-bold w-16 h-16 rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-all duration-200 disabled:opacity-50">
-            −
+      <!-- Gerenciamento de Pizzas (hosts) - SEMPRE VISÍVEL PARA HOSTS -->
+      <div class="bg-gradient-to-r from-orange-50 to-red-50 p-4 rounded-xl shadow-inner" *ngIf="isHost">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-bold text-gray-800">
+            <ion-icon name="restaurant" class="me-2"></ion-icon>
+            Gerenciar Pizzas ({{ pizzasList.length }})
+          </h3>
+          <button (click)="togglePizzaPanel()" 
+            class="text-red-600 hover:text-red-800 transition-colors">
+            <ion-icon [name]="showPizzaPanel ? 'chevron-up' : 'chevron-down'" class="text-xl"></ion-icon>
           </button>
+        </div>
 
-          <span class="text-6xl font-extrabold text-red-700" [class.animate-popIn]="animatePop">
-            {{ pizzaSlices }}
-          </span>
+        <div *ngIf="showPizzaPanel" class="space-y-4">
+          
+          <!-- Formulário para Adicionar Pizza (sempre no topo) -->
+          <div class="bg-white p-3 rounded-lg border-2 border-dashed border-orange-300">
+            <h4 class="font-bold text-gray-700 mb-2">➕ Adicionar Nova Pizza:</h4>
+            <div class="space-y-2">
+              <input [(ngModel)]="newPizza.sabor" 
+                placeholder="Sabor da pizza (ex: Margherita)" 
+                class="w-full p-2 border border-gray-300 rounded text-sm">
+              
+              <div class="flex gap-2">
+                <input [(ngModel)]="newPizza.fatias" 
+                  type="number" min="1" max="16" 
+                  placeholder="Fatias" 
+                  class="flex-1 p-2 border border-gray-300 rounded text-sm">
+                
+                <input [(ngModel)]="newPizza.valor" 
+                  type="number" min="0" step="0.01" 
+                  placeholder="Valor (R$)" 
+                  class="flex-1 p-2 border border-gray-300 rounded text-sm">
+              </div>
+              
+              <button (click)="addPizza()" 
+                [disabled]="!newPizza.sabor || !newPizza.fatias || !newPizza.valor"
+                class="w-full bg-orange-500 text-white py-2 rounded font-medium hover:bg-orange-600 disabled:opacity-50">
+                <ion-icon name="add-circle" class="me-2"></ion-icon>
+                Adicionar Pizza
+              </button>
+            </div>
+          </div>
 
-          <button (click)="addSlice()"
-            class="bg-green-500 text-white text-4xl font-bold w-16 h-16 rounded-full flex items-center justify-center shadow-lg hover:bg-green-600 transition-all duration-200">
-            +
+          <!-- Lista de Pizzas Cadastradas -->
+          <div class="bg-white p-3 rounded-lg" *ngIf="pizzasList.length > 0; else noPizzasYet">
+            <h4 class="font-bold text-gray-700 mb-2">🍕 Pizzas Cadastradas:</h4>
+            <div class="space-y-2">
+              <div *ngFor="let pizza of pizzasList; let i = index" 
+                class="flex items-center justify-between bg-gray-50 p-2 rounded">
+                <div class="flex-1">
+                  <span class="font-medium">{{ pizza.sabor }}</span>
+                  <div class="text-sm text-gray-600">
+                    <span class="text-green-600 font-bold">{{ getAvailableSlices(i) }}</span>/<span>{{ pizza.fatias }}</span> fatias disponíveis
+                  </div>
+                  <span class="text-sm font-bold text-green-600">{{ pizza.valor | currency:'BRL':'symbol':'1.2-2' }}</span>
+                </div>
+                <button (click)="removePizza(i)" 
+                  class="text-red-500 hover:text-red-700 ml-2">
+                  <ion-icon name="trash"></ion-icon>
+                </button>
+              </div>
+            </div>
+            <div class="mt-2 p-2 bg-blue-50 rounded">
+              <span class="text-sm font-bold text-blue-700">
+                Total: {{ getTotalPizzasValue() | currency:'BRL':'symbol':'1.2-2' }} 
+                ({{ getTotalAvailableSlices() }}/{{ getTotalSlices() }} fatias)
+              </span>
+            </div>
+          </div>
+
+          <ng-template #noPizzasYet>
+            <div class="bg-white p-4 rounded-lg text-center">
+              <ion-icon name="pizza" class="text-4xl text-gray-400 mb-2"></ion-icon>
+              <p class="text-gray-500">Nenhuma pizza cadastrada ainda.</p>
+              <p class="text-xs text-gray-400 mt-1">Adicione pizzas usando o formulário acima!</p>
+            </div>
+          </ng-template>
+
+          <!-- Tipo de Divisão -->
+          <div class="bg-white p-3 rounded-lg">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              🧮 Tipo de Divisão:
+            </label>
+            <div class="flex gap-2">
+              <button (click)="changeDivisionType('consumption')"
+                [class]="roomSettings.divisionType === 'consumption' ? 
+                  'bg-orange-600 text-white' : 'bg-gray-200 text-gray-700'"
+                class="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors">
+                Por Consumo
+              </button>
+              <button (click)="changeDivisionType('equal')"
+                [class]="roomSettings.divisionType === 'equal' ? 
+                  'bg-orange-600 text-white' : 'bg-gray-200 text-gray-700'"
+                class="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors">
+                Igual para Todos
+              </button>
+            </div>
+          </div>
+
+          <!-- Salvar Configurações -->
+          <button (click)="saveSettings()" 
+            [disabled]="!settingsChanged"
+            class="w-full bg-red-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50">
+            <ion-icon name="save" class="me-2"></ion-icon>
+            {{ settingsChanged ? 'Salvar Alterações' : 'Configurações Salvas' }}
           </button>
+        </div>
+      </div>
+
+      <!-- Informação para participantes não-host -->
+      <div class="bg-orange-50 p-4 rounded-xl shadow-inner" *ngIf="!isHost">
+        <h3 class="text-lg font-bold text-gray-800 mb-2">
+          <ion-icon name="information-circle" class="me-2"></ion-icon>
+          Informações da Sessão
+        </h3>
+        <div class="text-sm text-gray-600 space-y-1">
+          <p>• Pizzas cadastradas: <strong>{{ pizzasList.length }}</strong></p>
+          <p>• Tipo de divisão: <strong>{{ roomSettings.divisionType === 'consumption' ? 'Por Consumo' : 'Igual para Todos' }}</strong></p>
+          <p *ngIf="getTotalPizzasValue() > 0">• Valor total: <strong>{{ getTotalPizzasValue() | currency:'BRL':'symbol':'1.2-2' }}</strong></p>
+          <p *ngIf="pizzasList.length === 0" class="text-orange-600 font-medium">⏳ Aguardando host cadastrar pizzas...</p>
+        </div>
+      </div>
+
+      <!-- Controle de Fatias do Usuário -->
+      <div class="bg-yellow-50 p-4 rounded-xl shadow-inner" 
+        *ngIf="roomSettings.divisionType === 'consumption'">
+        <h2 class="text-xl font-bold text-gray-800 mb-3 text-center">🍕 Suas Fatias: {{ getTotalUserSlices() }}</h2>
+        
+        <!-- Seletor por Pizza -->
+        <div class="space-y-3" *ngIf="pizzasList.length > 0; else waitingForPizzas">
+          <div *ngFor="let pizza of pizzasList; let i = index" 
+            class="bg-white p-3 rounded-lg border">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-medium text-gray-800">{{ pizza.sabor }}</span>
+              <span class="text-sm text-gray-600">
+                {{ pizza.valor / pizza.fatias | currency:'BRL':'symbol':'1.2-2' }}/fatia
+              </span>
+            </div>
+            
+            <!-- Status das fatias -->
+            <div class="text-center mb-2">
+              <span class="text-sm" [class]="getAvailableSlices(i) > 0 ? 'text-green-600' : 'text-red-600'">
+                <strong>{{ getAvailableSlices(i) }}</strong> fatias disponíveis de <strong>{{ pizza.fatias }}</strong>
+              </span>
+            </div>
+            
+            <div class="flex items-center justify-center space-x-3">
+              <button (click)="removeSliceFromPizza(i)" 
+                [disabled]="getUserSlicesFromPizza(i) <= 0"
+                class="bg-red-500 text-white text-2xl font-bold w-10 h-10 rounded-full flex items-center justify-center shadow hover:bg-red-600 disabled:opacity-50">
+                −
+              </button>
+              
+              <div class="text-center">
+                <div class="text-3xl font-bold text-orange-600">
+                  {{ getUserSlicesFromPizza(i) }}
+                </div>
+                <div class="text-xs text-gray-500">
+                  suas fatias
+                </div>
+              </div>
+              
+              <button (click)="addSliceToPizza(i)" 
+                [disabled]="getAvailableSlices(i) <= 0"
+                class="bg-green-500 text-white text-2xl font-bold w-10 h-10 rounded-full flex items-center justify-center shadow hover:bg-green-600 disabled:opacity-50">
+                +
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <ng-template #waitingForPizzas>
+          <div class="text-center py-6">
+            <ion-icon name="pizza" class="text-6xl text-gray-300 mb-3"></ion-icon>
+            <p class="text-gray-500 font-medium">Aguardando pizzas serem cadastradas</p>
+            <p class="text-sm text-gray-400 mt-1">O host precisa adicionar as pizzas primeiro</p>
+          </div>
+        </ng-template>
+      </div>
+
+      <!-- Divisão Igual -->
+      <div class="bg-yellow-50 p-4 rounded-xl shadow-inner"
+        *ngIf="roomSettings.divisionType === 'equal'">
+        <h2 class="text-xl font-bold text-gray-800 mb-2 text-center">🤝 Divisão Igual</h2>
+        <p class="text-center text-gray-600">
+          O valor total será dividido igualmente entre todos os participantes.
+        </p>
+        <p class="text-center text-lg font-bold text-orange-600 mt-2">
+          {{ participants.length }} participante(s)
+        </p>
+        <div class="text-center mt-3" *ngIf="getTotalPizzasValue() > 0">
+          <p class="text-sm text-gray-600">Valor por pessoa:</p>
+          <p class="text-2xl font-bold text-green-600">{{ getEqualShare() | currency:'BRL':'symbol':'1.2-2' }}</p>
+        </div>
+      </div>
+
+      <!-- Resumo de Valores (sempre visível se há pizzas) -->
+      <div class="bg-green-50 p-4 rounded-xl shadow-inner" *ngIf="getTotalPizzasValue() > 0">
+        <h3 class="text-lg font-bold text-gray-800 mb-2">
+          <ion-icon name="calculator" class="me-2"></ion-icon>
+          Resumo da Conta
+        </h3>
+        
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span>Total de pizzas:</span>
+            <span class="font-bold">{{ getTotalPizzasValue() | currency:'BRL':'symbol':'1.2-2' }}</span>
+          </div>
+          
+          <div class="flex justify-between" *ngIf="roomSettings.divisionType === 'consumption'">
+            <span>Suas fatias:</span>
+            <span class="font-bold">{{ getTotalUserSlices() }}</span>
+          </div>
+          
+          <div class="flex justify-between" *ngIf="roomSettings.divisionType === 'consumption'">
+            <span>Valor das suas fatias:</span>
+            <span class="font-bold text-orange-600">{{ getConsumptionShare() | currency:'BRL':'symbol':'1.2-2' }}</span>
+          </div>
+          
+          <div class="flex justify-between" *ngIf="roomSettings.divisionType === 'equal'">
+            <span>Divisão por pessoa:</span>
+            <span class="font-bold">{{ getEqualShare() | currency:'BRL':'symbol':'1.2-2' }}</span>
+          </div>
+          
+          <hr class="border-gray-300">
+          
+          <div class="flex justify-between text-lg font-bold">
+            <span>Você deve pagar:</span>
+            <span class="text-green-600">{{ getFormattedShare() }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status das Pizzas (para todos verem) -->
+      <div class="bg-purple-50 p-4 rounded-xl shadow-inner" *ngIf="pizzasList.length > 0">
+        <h3 class="text-lg font-bold text-gray-800 mb-2">
+          <ion-icon name="pie-chart" class="me-2"></ion-icon>
+          Status das Pizzas
+        </h3>
+        <div class="space-y-2">
+          <div *ngFor="let pizza of pizzasList; let i = index" 
+            class="flex justify-between items-center bg-white p-2 rounded">
+            <span class="font-medium">{{ pizza.sabor }}</span>
+            <div class="text-right">
+              <div class="text-sm font-bold" 
+                [class]="getAvailableSlices(i) > 0 ? 'text-green-600' : 'text-red-500'">
+                {{ getAvailableSlices(i) }}/{{ pizza.fatias }} disponíveis
+              </div>
+              <div class="text-xs text-gray-500">
+                {{ getConsumedSlices(i) }} consumidas
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Controles do Host -->
-      <!--<div class="mt-4" *ngIf="isHost && participants.length > 1">
-        <h3 class="text-lg font-bold text-gray-800 mb-2">Controles do Host:</h3>
-        <label class="block text-gray-700 text-md font-medium mb-2">Remover fatia de:</label>
-        <div class="flex gap-2">
+      <div *ngIf="isHost && participants.length > 1 && roomSettings.divisionType === 'consumption' && pizzasList.length > 0" 
+        class="bg-orange-50 p-3 rounded-lg">
+        <h4 class="font-bold text-gray-700 mb-2">⚙️ Controles do Host:</h4>
+        <div class="flex gap-2 mb-2">
           <select [(ngModel)]="selectedParticipantToRemove"
-            class="flex-grow p-3  border border-gray-300 rounded-xl text-lg">
-            <option *ngFor="let p of participants" [value]="p.author">{{ p.author }}</option>
+            class="flex-1 p-2 border border-gray-300 rounded text-sm">
+            <option value="">Ajustar fatias de...</option>
+            <option *ngFor="let p of participants" [value]="p.author" [disabled]="p.author === nome">
+              {{ p.author }} ({{ getUserTotalSlicesForParticipant(p.author) }} fatias)
+            </option>
           </select>
-          <button (click)="hostRemoveSlice()"
-            class="bg-red-600 text-white py-3 px-4 h-16 rounded-xl text-lg font-semibold hover:bg-red-700 transition-all duration-200">
-            Remover Fatias
+          <button (click)="hostRemoveSlice()" [disabled]="!selectedParticipantToRemove"
+            class="bg-red-600 text-white py-2 px-3 rounded text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+            -1 Fatia
           </button>
         </div>
-      </div>-->
-
-      <!-- Valor a pagar + Sair -->
-      <div class="text-center">
-        <p class="text-gray-600 text-lg font-medium mb-2">
-          Valor a pagar: <span class="font-bold text-red-600">{{ getFormattedTotal()}}</span>
-        </p>
-        <button (click)="leaveSession()"
-          class="w-full mt-6 bg-gray-300 text-gray-800 py-2 px-4 rounded-xl text-md font-semibold hover:bg-gray-400 transition-all duration-200">
-          Sair da Sessão
+        <button (click)="resetAllSlices()" 
+          class="w-full bg-yellow-600 text-white py-2 px-3 rounded text-sm font-medium hover:bg-yellow-700">
+          🔄 Resetar Todas as Fatias
         </button>
+      </div>
 
-        <!-- QR CODE -->
-
-        <div *ngIf="roomId && isHost" class="mt-4">
-          <h5 class="mb-2 text-secondary">Compartilhe o QR Code:</h5>
-          <div class="d-flex justify-content-center align-items-center">
-            <qrcode [qrdata]="'https://89aff07f540a.ngrok-free.app/join/' + roomId" [width]="180"
-              [errorCorrectionLevel]="'M'"></qrcode>
-          </div>
+      <!-- Status da Sessão (informações de debug) -->
+      <div *ngIf="isHost" class="bg-gray-50 p-3 rounded-lg text-xs">
+        <h4 class="font-bold text-gray-700 mb-2">📊 Status da Sessão:</h4>
+        <div class="grid grid-cols-2 gap-2 text-gray-600">
+          <div>Participantes: {{ participants.length }}</div>
+          <div>Pizzas: {{ pizzasList.length }}</div>
+          <div *ngIf="getTotalPizzasValue() > 0">Valor: {{ getTotalPizzasValue() | currency:'BRL':'symbol':'1.2-2' }}</div>
+          <div *ngIf="getTotalSlices() > 0">Fatias: {{ getTotalAvailableSlices() }}/{{ getTotalSlices() }}</div>
         </div>
-        <!-- FIM QR CODE -->
+        <div class="mt-2 flex items-center justify-between">
+          <span class="flex items-center">
+            <span [class]="isConnected && isRoomActive ? 'bg-green-400' : 'bg-red-400'" 
+                  class="inline-block w-2 h-2 rounded-full animate-pulse mr-2"></span>
+            <span class="text-xs text-gray-500">
+              {{ isConnected && isRoomActive ? 'Online' : 'Offline' }}
+            </span>
+          </span>
+          <button (click)="forceDataRefresh()" 
+            class="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">
+            🔄 Atualizar
+          </button>
+        </div>
+      </div>
+
+      <!-- Botão Sair -->
+      <button (click)="leaveSession()"
+        class="w-full mt-4 bg-gray-300 text-gray-800 py-2 px-4 rounded-xl text-md font-semibold hover:bg-gray-400 transition-all duration-200">
+        <ion-icon name="exit" class="me-2"></ion-icon>
+        Sair da Sessão
+      </button>
+
+      <!-- QR Code -->
+      <div *ngIf="roomId && isHost && roomSettings.showQRCode" class="mt-4 text-center">
+        <h5 class="mb-2 text-gray-600 font-medium">📱 Compartilhe o QR Code:</h5>
+        <div class="flex justify-center">
+          <qrcode [qrdata]="'https://87138696a2ea.ngrok-free.app/join/' + roomId" [width]="160"
+            [errorCorrectionLevel]="'M'"></qrcode>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOTIFICAÇÕES E INDICADORES (fora do container principal) -->
+    
+    <!-- Notificação de Configurações -->
+    <div *ngIf="settingsUpdateMessage" 
+      class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50">
+      {{ settingsUpdateMessage }}
+    </div>
+
+    <!-- Indicador de Sincronização -->
+    <div *ngIf="isSyncing" 
+      class="fixed top-16 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white px-3 py-1 rounded-full shadow-lg z-50 flex items-center text-sm">
+      <div class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+      Sincronizando...
+    </div>
+
+    <!-- Indicador de Reconexão -->
+    <div *ngIf="!isConnected && connectionAttempts > 0" 
+      class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-yellow-600 text-white px-3 py-1 rounded-full shadow-lg z-50 flex items-center text-sm">
+      <div class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+      Reconectando... ({{ connectionAttempts }}/{{ maxReconnectAttempts }})
+    </div>
+
+    <!-- Indicador de Sala Encerrada -->
+    <div *ngIf="!isRoomActive" 
+      class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-50">
+      <ion-icon name="warning" class="me-2"></ion-icon>
+      Sala foi encerrada
+    </div>
+
+    <!-- Status de Conectividade (canto superior direito) -->
+    <div class="fixed top-4 right-4 z-40" *ngIf="!isLoading">
+      <div class="flex items-center bg-white rounded-full px-3 py-1 shadow-md">
+        <div [class]="isConnected && isRoomActive ? 'bg-green-400' : 'bg-red-400'" 
+             class="w-2 h-2 rounded-full animate-pulse mr-2"></div>
+        <span class="text-xs text-gray-600">
+          {{ isConnected && isRoomActive ? 'Online' : 'Offline' }}
+        </span>
       </div>
     </div>
   </div>

@@ -18,71 +18,75 @@
 
       <div class="mb-3">
         <h1 class="fw-bold fs-5 mb-1">Seja Bem-vindo(a)</h1>
+        <p class="text-muted">Configure colaborativamente dentro da sala</p>
       </div>
 
-      <div class="mb-4">
-        <label for="sessionIdInput" class="block text-gray-700 text-lg font-medium mb-2">
-          CPF:
-        </label>
-        <input id="username" [(ngModel)]="username" class="form-control" placeholder="Ex: 999-999-999-99" />
-      </div>
+      <form [formGroup]="loginForm" (ngSubmit)="joinSession()">
+        <div class="mb-4">
+          <label for="cpfInput" class="block text-gray-700 text-lg font-medium mb-2">
+            <ion-icon name="person" class="me-2"></ion-icon>
+            CPF:
+          </label>
+          <input id="cpfInput" formControlName="cpf" class="form-control" placeholder="Ex: 99999999999" type="number" />
+          <div *ngIf="loginForm.get('cpf')?.invalid && (loginForm.get('cpf')?.dirty || loginForm.get('cpf')?.touched)" class="text-danger text-sm mt-1">
+            <span *ngIf="loginForm.get('cpf')?.errors?.['required']">CPF é obrigatório.</span>
+            <span *ngIf="loginForm.get('cpf')?.errors?.['pattern']">CPF deve ter 11 dígitos numéricos.</span>
+          </div>
+        </div>
 
-      <div class="mb-4">
-        <label for="nome" class="text-gray-700 text-lg font-medium">Nome:</label>
-        <input id="nome" [(ngModel)]="nome" type="text" class="form-control mb-3" placeholder="Ex: João Pedro">
-      </div>
+        <div class="mb-4">
+          <label for="nomeInput" class="text-gray-700 text-lg font-medium">
+            <ion-icon name="person-circle" class="me-2"></ion-icon>
+            Nome:
+          </label>
+          <input id="nomeInput" formControlName="nome" type="text" class="form-control mb-3" placeholder="Ex: João Pedro" [readonly]="nomeCarregado">
+          <div *ngIf="loginForm.get('nome')?.invalid && (loginForm.get('nome')?.dirty || loginForm.get('nome')?.touched)" class="text-danger text-sm mt-1">
+            <span *ngIf="loginForm.get('nome')?.errors?.['required']">Nome é obrigatório.</span>
+          </div>
+        </div>
 
-      <div class="mb-4" *ngIf="showRoomEnter">
-        <label for="sessionId" class="text-gray-700 text-lg font-medium">Digite o ID da Sala:</label>
-        <input id="sessionId" [class.animate-popIn]="animatePop" [(ngModel)]="sessionId" type="text"
-          class="form-control mb-3" placeholder="Ex: pizza-party-123">
-      </div>
+        <div class="mb-4">
+          <label for="sessionIdInput" class="text-gray-700 text-lg font-medium">
+            <ion-icon name="home" class="me-2"></ion-icon>
+            ID da Confraternização:
+          </label>
+          <input id="sessionIdInput" [class.animate-popIn]="animatePop" formControlName="sessionId" type="text"
+            class="form-control mb-3" placeholder="Ex: pizza-day-123">
+            <div *ngIf="loginForm.get('sessionId')?.invalid && (loginForm.get('sessionId')?.dirty || loginForm.get('sessionId')?.touched)" class="text-danger text-sm mt-1">
+              <span *ngIf="loginForm.get('sessionId')?.errors?.['required']">ID da sessão é obrigatória.</span>
+              <span *ngIf="loginForm.get('sessionId')?.errors?.['minlength']">ID da sessão deve ter no mínimo 8 caracteres.</span>
+            </div>
+        </div>
 
-      <button (click)="joinSession()"
-        class="w-full bg-red-600 text-white px-6 rounded-xl text-lg font-semibold hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg mb-2"
-        style="height: 40px;">
-        Entrar
-      </button>
+        <button type="submit"
+          class="w-full bg-red-600 text-white px-6 rounded-xl text-lg font-semibold hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg mb-3"
+          style="height: 45px;"
+          [disabled]="loginForm.invalid"> 
+          <ion-icon name="enter" class="me-2"></ion-icon>
+          Entrar na Sala
+        </button>
+      </form>
 
       <button (click)="generateId()"
-        class="w-full h-10 text-base rounded-xl font-normal capitalize border border-red-600 text-red-600 hover:bg-red-600 hover:text-white transition duration-150 ease-in-out">
-        Gerar ID
+        class="w-full h-12 text-base rounded-xl font-medium border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white transition duration-200 ease-in-out mb-3">
+        <ion-icon name="dice" class="me-2"></ion-icon>
+        Gerar ID Rápido para Nova Sala
       </button>
 
-      <div class="line-text position-relative mt-4" style="height: 20px;">
-        <span class="lines position-absolute top-50 start-0 w-100 border-top border-secondary"></span>
-        <span
-          class="text position-absolute top-50 start-50 translate-middle bg-white px-3 fs-8 fw-semibold text-secondary">
-          Entrar como
-        </span>
-      </div>
-
-      <div class="flex space-x-6 mt-4 align-items-center justify-center">
-        <label class="flex items-center space-x-2 cursor-pointer">
-          <input type="checkbox" [(ngModel)]="checkbox1" (click)="showRoomEnter = !showRoomEnter"
-            class="form-checkbox h-5 w-5 text-red-600 rounded focus:ring-red-500">
-          <span class="text-gray-800 text-base">Anfitrião</span>
-        </label>
-
-        <label class="flex items-center space-x-2 cursor-pointer">
-          <input type="checkbox" [(ngModel)]="checkbox2"
-            class="form-checkbox h-5 w-5 text-red-600 rounded focus:ring-red-500">
-          <span class="text-gray-800 text-base">Usuário</span>
-        </label>
-      </div>
-
-
-      <!-- QR Code Gerado -->
-      <!--<div *ngIf="sessionId" class="mt-4">
-        <h5 class="mb-2 text-secondary">Compartilhe o QR Code:</h5>
-        <div class="d-flex justify-content-center align-items-center">
-          <qrcode [qrdata]="'https://89aff07f540a.ngrok-free.app/join/' + sessionId" [width]="180"
-            [errorCorrectionLevel]="'M'"></qrcode>
+      <!-- Info Box sobre Configuração Colaborativa -->
+      <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4 rounded-r-lg">
+        <div class="flex items-start">
+          <ion-icon name="information-circle" class="text-blue-400 mr-2 text-xl mt-1"></ion-icon>
+          <div class="text-left">
+            <p class="text-blue-800 text-sm font-semibold mb-1">💡 Dica:</p>
+            <p class="text-blue-700 text-sm">
+              Todos os <strong>hosts</strong> podem configurar o valor da pizza e tipo de divisão 
+              diretamente dentro da sala. As mudanças são aplicadas em tempo real!
+            </p>
+          </div>
         </div>
-        <p class="small mt-2 text-muted">{{ sessionId }}</p>
-      </div>-->
+      </div>
 
-      <!-- Divisor -->
       <div class="line-text position-relative mt-4" style="height: 20px;">
         <span class="lines position-absolute top-50 start-0 w-100 border-top border-secondary"></span>
         <span
@@ -91,20 +95,22 @@
         </span>
       </div>
 
-      <!-- Botão para escanear QR Code -->
       <div class="mt-3">
-        <button [disabled]="!username" (click)="showScanner = !showScanner" class="btn btn-outline-warning mt-2">
+        <button [disabled]="loginForm.get('cpf')?.invalid" (click)="showScanner = !showScanner" 
+          class="btn btn-outline-warning mt-2 d-flex align-items-center justify-content-center mx-auto">
+          <ion-icon [name]="showScanner ? 'close' : 'qr-code-outline'" class="me-2"></ion-icon>
           {{ showScanner ? 'Fechar Scanner' : 'Escanear QR Code' }}
         </button>
 
         <div *ngIf="showScanner" class="mt-3">
           <zxing-scanner (scanSuccess)="onCodeResult($event)" [torch]="false" [formats]="barcodeFormats"
-            style="width: 100%; height: 200px; border: 1px dashed #f59e0b; border-radius: 10px;">
+            style="width: 100%; height: 200px; border: 2px dashed #f59e0b; border-radius: 10px;">
           </zxing-scanner>
         </div>
       </div>
 
       <div *ngIf="errorMessage" class="alert alert-danger mt-3 p-2 text-center" role="alert">
+        <ion-icon name="alert-circle" class="me-2"></ion-icon>
         {{ errorMessage }}
       </div>
     </div>

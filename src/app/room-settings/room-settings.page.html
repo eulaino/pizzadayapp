@@ -1,0 +1,182 @@
+<ion-content class="bg-light">
+  <div id="header" class="bg-gradient-to-br from-red-500 to-yellow-500 text-white rounded-bottom d-flex flex-column"
+    style="height: 45%;">
+    <div id="app-bar" class="d-flex justify-content-between align-items-center px-3" style="height: 60px;">
+      <ion-icon name="arrow-back" style="font-size: 24px; cursor: pointer;" (click)="goBack()"></ion-icon>
+      <h3 class="text-white fw-bold mb-0">Configurações da Sala</h3>
+      <div style="width: 24px;"></div>
+    </div>
+
+    <div id="logo" class="bg-white rounded d-flex justify-content-center align-items-center mx-auto mt-3"
+      style="width: 80px; height: 80px;">
+      <ion-icon name="settings" style="font-size: 40px; color: #ef4444;"></ion-icon>
+    </div>
+
+    <h2 class="text-center fw-bold mt-2" style="font-size: 18px; letter-spacing: 1px;">CONFIGURAR SALA</h2>
+  </div>
+
+  <div class="card mx-3 position-absolute start-0 end-0" style="top: 32%; border-radius: 20px; box-shadow: none;">
+    <div class="card-body px-4 py-4">
+
+      <div class="mb-3 text-center">
+        <h1 class="fw-bold fs-5 mb-1">Configure sua Sala</h1>
+        <p class="text-muted">Defina as regras da confraternização</p>
+      </div>
+
+      <form [formGroup]="settingsForm" (ngSubmit)="createRoom()">
+        
+        <!-- ID da Sala -->
+        <div class="mb-4">
+          <label for="roomIdInput" class="block text-gray-700 text-lg font-medium mb-2">
+            <ion-icon name="home" class="me-2"></ion-icon>
+            ID da Sala:
+          </label>
+          <div class="d-flex gap-2">
+            <input id="roomIdInput" formControlName="roomId" class="form-control" 
+              placeholder="Ex: pizza-day-2024" type="text" readonly />
+            <button type="button" (click)="generateRoomId()" 
+              class="btn btn-outline-warning px-3">
+              <ion-icon name="refresh"></ion-icon>
+            </button>
+          </div>
+        </div>
+
+        <!-- Valor Total da Pizza -->
+        <div class="mb-4">
+          <label for="totalValueInput" class="block text-gray-700 text-lg font-medium mb-2">
+            <ion-icon name="cash" class="me-2"></ion-icon>
+            Valor Total da Pizza:
+          </label>
+          <div class="input-group">
+            <span class="input-group-text">R$</span>
+            <input id="totalValueInput" formControlName="totalValue" class="form-control" 
+              placeholder="150,00" type="number" step="0.01" min="1" />
+          </div>
+          <div *ngIf="settingsForm.get('totalValue')?.invalid && (settingsForm.get('totalValue')?.dirty || settingsForm.get('totalValue')?.touched)" 
+            class="text-danger text-sm mt-1">
+            <span *ngIf="settingsForm.get('totalValue')?.errors?.['required']">Valor é obrigatório.</span>
+            <span *ngIf="settingsForm.get('totalValue')?.errors?.['min']">Valor deve ser maior que R$ 1,00.</span>
+          </div>
+        </div>
+
+        <!-- Tipo de Divisão -->
+        <div class="mb-4">
+          <label class="block text-gray-700 text-lg font-medium mb-2">
+            <ion-icon name="calculator" class="me-2"></ion-icon>
+            Tipo de Divisão:
+          </label>
+          <div class="d-flex flex-column gap-2">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" formControlName="divisionType" 
+                value="slices" id="slicesRadio">
+              <label class="form-check-label" for="slicesRadio">
+                Por Fatias (cada pessoa paga pela quantidade que comeu)
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" formControlName="divisionType" 
+                value="equal" id="equalRadio">
+              <label class="form-check-label" for="equalRadio">
+                Divisão Igual (valor dividido igualmente entre todos)
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Número de Fatias (só aparece se divisão por fatias) -->
+        <div class="mb-4" *ngIf="settingsForm.get('divisionType')?.value === 'slices'">
+          <label for="slicesInput" class="block text-gray-700 text-lg font-medium mb-2">
+            <ion-icon name="pizza" class="me-2"></ion-icon>
+            Número Total de Fatias:
+          </label>
+          <input id="slicesInput" formControlName="totalSlices" class="form-control" 
+            placeholder="8" type="number" min="1" max="50" />
+          <small class="text-muted">Deixe em branco para divisão automática por consumo</small>
+        </div>
+
+        <!-- Configurações Extras -->
+        <div class="mb-4">
+          <label class="block text-gray-700 text-lg font-medium mb-2">
+            <ion-icon name="options" class="me-2"></ion-icon>
+            Configurações Extras:
+          </label>
+          
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" formControlName="allowGuestRemoval" 
+              id="guestRemovalCheck">
+            <label class="form-check-label" for="guestRemovalCheck">
+              Permitir que hosts removam fatias de outros participantes
+            </label>
+          </div>
+
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" formControlName="showQRCode" 
+              id="qrCodeCheck">
+            <label class="form-check-label" for="qrCodeCheck">
+              Mostrar QR Code para novos participantes
+            </label>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" formControlName="autoCalculate" 
+              id="autoCalcCheck">
+            <label class="form-check-label" for="autoCalcCheck">
+              Calcular automaticamente valor individual
+            </label>
+          </div>
+        </div>
+
+        <!-- Preview do Valor -->
+        <div class="alert alert-info mb-4" *ngIf="getPreviewText()">
+          <h6 class="fw-bold mb-2">
+            <ion-icon name="information-circle" class="me-2"></ion-icon>
+            Preview:
+          </h6>
+          <p class="mb-0">{{ getPreviewText() }}</p>
+        </div>
+
+        <!-- Botões -->
+        <div class="d-flex flex-column gap-2">
+          <button type="submit"
+            class="w-full bg-red-600 text-white px-6 py-3 rounded-xl text-lg font-semibold hover:bg-red-700 transition-all duration-200 shadow-md hover:shadow-lg"
+            [disabled]="settingsForm.invalid">
+            <ion-icon name="checkmark-circle" class="me-2"></ion-icon>
+            Criar Sala com Essas Configurações
+          </button>
+
+          <button type="button" (click)="saveAsTemplate()"
+            class="w-full border border-red-600 text-red-600 px-6 py-3 rounded-xl text-lg font-semibold hover:bg-red-50 transition-all duration-200"
+            [disabled]="settingsForm.invalid">
+            <ion-icon name="bookmark" class="me-2"></ion-icon>
+            Salvar como Template
+          </button>
+
+          <button type="button" (click)="goBack()"
+            class="w-full bg-gray-300 text-gray-700 px-6 py-3 rounded-xl text-lg font-semibold hover:bg-gray-400 transition-all duration-200">
+            <ion-icon name="arrow-back" class="me-2"></ion-icon>
+            Voltar
+          </button>
+        </div>
+      </form>
+
+      <!-- Templates Salvos -->
+      <div class="mt-4" *ngIf="savedTemplates.length > 0">
+        <h6 class="fw-bold text-gray-700 mb-2">
+          <ion-icon name="library" class="me-2"></ion-icon>
+          Templates Salvos:
+        </h6>
+        <div class="d-flex flex-wrap gap-2">
+          <button *ngFor="let template of savedTemplates" 
+            (click)="loadTemplate(template)"
+            class="btn btn-outline-secondary btn-sm">
+            {{ template.name }}
+          </button>
+        </div>
+      </div>
+
+      <div *ngIf="errorMessage" class="alert alert-danger mt-3 p-2 text-center" role="alert">
+        {{ errorMessage }}
+      </div>
+    </div>
+  </div>
+</ion-content>

@@ -2,17 +2,16 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ApiService } from '../services/api.service';
 import { Router } from '@angular/router';
 import { SocketService } from '../services/socket.service';
-import { AlertController, NavController } from '@ionic/angular';
+import { AlertController, NavController, LoadingController } from '@ionic/angular';
 import { Subscription } from 'rxjs';
 import { ChangeDetectorRef } from '@angular/core';
 import { ZXingScannerModule } from '@zxing/ngx-scanner';
 import { QRCodeComponent } from 'angularx-qrcode';
 import { BarcodeFormat } from '@zxing/library';
+import { CommonModule } from '@angular/common';
+import { FormsModule, ReactiveFormsModule, Validators, FormBuilder, FormGroup } from '@angular/forms';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
-
-// Importe os componentes Ionic e módulos Angular que você usa nesta página
-import { CommonModule } from '@angular/common'; // Para *ngIf, *ngFor
-import { FormsModule } from '@angular/forms'; // Para [(ngModel)]
 import {
   IonHeader,
   IonToolbar,
@@ -27,8 +26,7 @@ import {
   IonList,
   IonItem,
   IonInput,
-  IonButton,
-  IonLoading // <--- Importar IonLoading para o template
+  IonButton
 } from '@ionic/angular/standalone';
 
 @Component({
@@ -39,6 +37,7 @@ import {
   imports: [
     CommonModule,
     FormsModule,
+    ReactiveFormsModule,
     QRCodeComponent,
     ZXingScannerModule,
     IonHeader,
@@ -54,31 +53,23 @@ import {
     IonList,
     IonItem,
     IonInput,
-    IonButton,
-    IonLoading  // <-- Importa IonLoading
+    IonButton
   ]
 })
 export class HomePage implements OnInit, OnDestroy {
-  sessionId: string = '';
-  username: string = '';
-  nome: string = '';
   barcodeFormats = [BarcodeFormat.QR_CODE];
   showScanner = false;
-  showRoomEnter = false;
-  checkbox1 = false;
-  checkbox2 = false;
+  anfitriaoBox = false;
+  usuarioBox = false;
   errorMessage: string = '';
   pulse = false;
   animatePop = false;
 
-  triggerPulse() {
-    this.pulse = false;
-    setTimeout(() => {
-      this.pulse = true;
-    }, 10);
-  }
-  loading = false; // controla o loading
   private subscriptions: Subscription = new Subscription();
+  private currentLoading: HTMLIonLoadingElement | null = null;
+
+  loginForm!: FormGroup;
+  nomeCarregado: boolean = false;
 
   constructor(
     private socketService: SocketService,
@@ -86,15 +77,37 @@ export class HomePage implements OnInit, OnDestroy {
     private alertController: AlertController,
     private navCtrl: NavController,
     private cdr: ChangeDetectorRef,
-    private api: ApiService
+    private api: ApiService,
+    private fb: FormBuilder,
+    private loadingController: LoadingController
   ) { }
 
   ngOnInit() {
-    this.sessionId = '';
-    this.username = '';
+    this.loginForm = this.fb.group({
+      cpf: ['', [Validators.required, Validators.pattern(/^\d{11}$/)]],
+      nome: ['', Validators.required],
+      sessionId: ['', [Validators.required, Validators.minLength(8)]]
+    });
+
+    // Observa as mudanças no campo CPF para buscar o nome
+    this.loginForm.get('cpf')?.valueChanges
+      .pipe(
+        debounceTime(700),
+        distinctUntilChanged()
+      )
+      .subscribe(cpf => {
+        if (cpf && cpf.length === 11) {
+          this.buscarNomePorCpf(cpf);
+        } else {
+          this.loginForm.get('nome')?.setValue('');
+          this.loginForm.get('nome')?.enable();
+          this.nomeCarregado = false;
+          this.errorMessage = '';
+        }
+      });
 
     this.subscriptions.add(this.socketService.onJoinError().subscribe(async (message) => {
-      this.loading = false;  // desliga o loading em caso de erro //
+      await this.dismissLoading();
       const alert = await this.alertController.create({
         header: 'Erro ao Entrar',
         message: message,
@@ -104,86 +117,139 @@ export class HomePage implements OnInit, OnDestroy {
     }));
 
     this.subscriptions.add(this.socketService.onPreviousMessages().subscribe(async (messages) => {
-      this.loading = false;  // desliga o loading ao receber resposta
+      await this.dismissLoading();
+      const { sessionId, cpf, nome } = this.loginForm.getRawValue();
+
       this.router.navigateByUrl('/session-room', {
         state: {
-          roomId: this.sessionId,
-          username: this.username,
-          nome: this.nome,
+          roomId: sessionId,
+          username: cpf,
+          nome: nome,
           initialParticipants: messages,
         },
       });
     }));
   }
 
-
   ngOnDestroy() {
     this.subscriptions.unsubscribe();
   }
 
+  async buscarNomePorCpf(cpf: string) {
+    this.nomeCarregado = false;
+    this.errorMessage = '';
+
+    try {
+      const response = await this.api.buscarUsuarioPorCpf(cpf).toPromise();
+
+      if (response && response.nome) {
+        this.loginForm.get('nome')?.setValue(response.nome);
+        this.loginForm.get('nome')?.disable();
+        this.nomeCarregado = true;
+        console.log('Nome carregado do Firebase:', response.nome);
+      } else {
+        this.loginForm.get('nome')?.setValue('');
+        this.loginForm.get('nome')?.enable();
+        this.nomeCarregado = false;
+        this.errorMessage = 'CPF não encontrado ou sem nome associado. Por favor, preencha seu nome.';
+        console.log('CPF não encontrado no Firebase ou sem nome associado.');
+      }
+    } catch (error: any) {
+      console.error('Erro ao buscar CPF no Firebase:', error);
+      this.loginForm.get('nome')?.setValue('');
+      this.loginForm.get('nome')?.enable();
+      this.nomeCarregado = false;
+      if (error.status === 404) {
+        this.errorMessage = 'CPF não encontrado. Preencha seu nome para criar um novo registro.';
+      } else {
+        this.errorMessage = 'Erro ao buscar dados. Tente novamente mais tarde.';
+      }
+    }
+  }
+
   async joinSession() {
-    const cpf = this.username.trim();
-    
-    
-    if (!this.sessionId.trim()) {
-      await this.presentAlert('Erro', 'A ID da sessão não pode estar vazia.');
-      this.errorMessage = 'A ID da sessão não pode estar vazia.';
-      return;
-    }
-    if (this.sessionId.trim().length < 8) {
-      await this.presentAlert('Erro', 'A ID da sessão deve ter no mínimo 8 caracteres.');
-      return;
-    }
-    if (!this.username.trim()) {
-      await this.presentAlert('Erro', 'Seu nome não pode estar vazio.');
-      return;
-    }
-    if (this.username.trim().length < 3) {
-      await this.presentAlert('Erro', 'Seu nome deve conter mais que 3 caracteres.');
+    this.errorMessage = '';
+
+    if (this.loginForm.invalid) {
+      this.loginForm.markAllAsTouched();
+      this.presentAlert('Erro', 'Por favor, preencha todos os campos corretamente.');
       return;
     }
 
-    this.loading = true;  // liga o loading
+    await this.presentLoading();
 
-    this.api.salvarUsuario(this.username.trim(), this.sessionId.trim(), this.nome.trim()).subscribe({
+    const { cpf, nome, sessionId } = this.loginForm.getRawValue();
+
+    this.api.salvarUsuario(cpf, sessionId, nome).subscribe({
       next: (res) => {
-        console.log('Usuário salvo no Firebase:', res);
+        console.log('Usuário salvo/atualizado no Firebase:', res);
+        this.socketService.joinRoom(sessionId, cpf);
       },
-      error: (err) => {
-        console.warn('Erro ao salvar usuário (Firebase):', err);
+      error: async (err) => {
+        console.warn('Erro ao salvar/atualizar usuário (Firebase):', err);
+        await this.dismissLoading();
+        await this.presentAlert('Erro', 'Não foi possível salvar seus dados. Tente novamente.');
       }
     });
+  }
 
-    this.socketService.joinRoom(this.sessionId.trim(), this.username.trim());
+  async presentLoading() {
+    this.currentLoading = await this.loadingController.create({
+      message: 'Entrando...',
+      spinner: 'crescent'
+    });
+    await this.currentLoading.present();
+  }
 
+  async dismissLoading() {
+    if (this.currentLoading) {
+      await this.currentLoading.dismiss();
+      this.currentLoading = null;
+    }
+  }
+
+  triggerPulse() {
+    this.pulse = false;
+    setTimeout(() => {
+      this.pulse = true;
+    }, 10);
   }
 
   generateId() {
     this.animatePop = false;
-    // Força o Angular a resetar a classe
     setTimeout(() => {
       this.animatePop = true;
-
-      // Remove novamente depois da animação (~300ms) para permitir reutilização
       setTimeout(() => {
         this.animatePop = false;
-      }, 300); // corresponde à duração da animação CSS
+      }, 300);
     }, 10);
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    
+    // Gerar ID mais único e amigável
+    const characters = '0123456789abcdefghijklmnopqrstuvwxyz';
     let result = '';
-    const charactersLength = characters.length;
-    for (let i = 0; i < 8; i++) {
-      result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    for (let i = 0; i < 6; i++) {
+      result += characters.charAt(Math.floor(Math.random() * characters.length));
     }
-    this.sessionId = result;
+    this.loginForm.get('sessionId')?.setValue(`pizza-day-${result}`);
+  }
+
+  anfitriaoToggle() {
+    if (this.anfitriaoBox) {
+      this.usuarioBox = false;
+    }
+  }
+
+  usuarioToggle() {
+    if (this.usuarioBox) {
+      this.anfitriaoBox = false;
+    }
   }
 
   onCodeResult(result: string) {
     const matched = result.match(/\/join\/([a-zA-Z0-9\-]+)/);
     if (matched && matched[1]) {
-      this.sessionId = matched[1];
+      this.loginForm.get('sessionId')?.setValue(matched[1]);
 
-      // Dê tempo para atualizar o campo, depois tente entrar
       setTimeout(() => {
         this.joinSession();
       }, 300);
