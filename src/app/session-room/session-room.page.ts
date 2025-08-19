@@ -188,6 +188,13 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
   // Backup local
   private localStorageKey: string = '';
 
+  private readonly API_BASE = 'https://b68ac0bdef86.ngrok-free.app';
+
+  // flags/estado para robustez do HTTP/SOCKET
+  private disableHttpReload = false;            // desliga GET/REQUESTS depois que o socket já entregou settings atuais
+  private lastGoodSettings: any | null = null;  // cache do último settings válido (evita flick)
+  private lastSlicesUpdateTs: number = 0;       // último timestamp de atualização das fatias recebido
+
   triggerPulse() {
     this.pulse = false;
     setTimeout(() => {
@@ -220,9 +227,10 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
         this.originalSettings = { ...this.roomSettings };
         this.pizzasList = this.roomSettings.pizzas || [];
         this.globalSliceData = this.roomSettings.globalSlices || {};
+        this.lastGoodSettings = { ...this.roomSettings }; // guarda um snapshot bom
       }
 
-      const currentUserData = this.participants.find(p => p.author === this.nome);
+      const currentUserData = this.participants.find(p => p.author === this.cpf);
       if (currentUserData) {
         this.pizzaSlices = currentUserData.pizza;
         this.isHost = currentUserData.isHost || false;
@@ -316,6 +324,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
           this.isHost = backup.isHost || false;
 
           this.originalSettings = { ...this.roomSettings };
+          this.lastGoodSettings = { ...this.roomSettings }; // snapshot bom
           this.recalculateUserSlices();
           this.dataLoaded = true;
 
@@ -341,6 +350,42 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
 
   // ============ INICIALIZAÇÃO ROBUSTA ============
 
+  // Helper resiliente para JSON (pula banner do ngrok e evita flick)
+  private async fetchJson(url: string, init?: RequestInit): Promise<any> {
+    const fullUrl = url.includes('ngrok-skip-browser-warning')
+      ? url
+      : (url.includes('?') ? `${url}&ngrok-skip-browser-warning=true` : `${url}?ngrok-skip-browser-warning=true`);
+
+    const res = await fetch(fullUrl, {
+      ...(init || {}),
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+        ...(init?.headers || {})
+      },
+      cache: 'no-store'
+    });
+
+    const text = await res.text();
+
+    // tenta parsear como JSON mesmo com content-type incorreto
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      const sample = text.slice(0, 160).replace(/\s+/g, ' ');
+      throw new Error(`Resposta não-JSON do servidor (amostra): ${sample}`);
+    }
+
+    if (!res.ok) {
+      const msg = typeof data === 'object' ? JSON.stringify(data) : String(data);
+      throw new Error(`HTTP ${res.status}: ${msg}`);
+    }
+
+    return data;
+  }
+
   // ============ INICIALIZAÇÃO OTIMIZADA ============
 
   private async initializeSession() {
@@ -364,7 +409,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
 
       // 3. Conectar via socket
       console.log('🚪 Conectando na sala via socket...');
-      this.socketService.joinRoom(this.roomId, this.cpf);
+      this.socketService.joinRoom(this.roomId, this.cpf, this.nome);
 
       // 4. Forçar carregamento de dados após conexão
       setTimeout(() => {
@@ -408,7 +453,6 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
     await this.actionsModal.present();
   }
 
-
   // Forçar atualização de dados (anti-bug) - método público
   async forceDataRefresh() {
     try {
@@ -418,11 +462,19 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
       this.socketService.requestRoomStatus(this.roomId);
       this.socketService.checkCurrentUserHost(this.roomId);
 
-      // Solicitar configurações via socket
-      this.socketService.emit('getRoomSettings', { roomId: this.roomId });
+      // Solicitar configurações via socket (somente se não desabilitado)
+      if (!this.disableHttpReload) {
+        this.socketService.emit('getRoomSettings', { roomId: this.roomId });
+      } else {
+        console.log('⏭️ HTTP/Socket reload de settings desabilitado (socket como fonte de verdade).');
+      }
 
-      // Recarregar configurações via HTTP como backup
-      await this.loadRoomSettingsFromFirebase();
+      // Recarregar configurações via HTTP como backup (somente se não desabilitado)
+      if (!this.disableHttpReload) {
+        await this.loadRoomSettingsFromFirebase();
+      } else {
+        console.log('⏭️ HTTP reload desabilitado (socket como fonte de verdade).');
+      }
 
       // Forçar detecção de mudanças
       this.cdr.detectChanges();
@@ -436,27 +488,9 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
   // Verificar status da sala
   private async checkRoomStatus(): Promise<{ isActive: boolean, settings?: any }> {
     try {
-      // MUDE ESTA URL para sua URL real do servidor
-      const response = await fetch(`http://localhost:3000/api/room-status/${this.roomId}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const data = await response.json();
-          console.log('📊 Status da sala:', data);
-          return data;
-        } else {
-          console.error('❌ Resposta não é JSON');
-          return { isActive: true };
-        }
-      }
-      console.log('ℹ️ Assumindo sala ativa');
-      return { isActive: true };
+      const data = await this.fetchJson(`${this.API_BASE}/api/room-status/${this.roomId}`);
+      console.log('📊 Status da sala:', data);
+      return data && typeof data === 'object' ? data : { isActive: true };
     } catch (error) {
       console.error('⚠️ Erro ao verificar status:', error);
       return { isActive: true };
@@ -467,53 +501,104 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
   private async loadRoomSettingsFromFirebase() {
     console.log('⚙️ Carregando configurações...');
     try {
-      // MUDE ESTA URL para sua URL real do servidor
-      const response = await fetch(`http://localhost:3000/api/room-settings/${this.roomId}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const settings = await response.json();
-          this.applyRoomSettings(settings);
-          this.dataLoaded = true;
-          console.log('✅ Configurações carregadas via HTTP');
-        } else {
-          console.error('❌ Resposta não é JSON:', await response.text());
-          throw new Error('Resposta inválida do servidor');
-        }
-      } else {
-        console.log('ℹ️ Usando configurações padrão');
-        this.applyRoomSettings({
-          divisionType: 'consumption',
-          showQRCode: true,
-          pizzas: [],
-          globalSlices: {}
-        });
-      }
+      const settings = await this.fetchJson(`${this.API_BASE}/api/room-settings/${this.roomId}`);
+      this.applyRoomSettings(settings);
+      this.dataLoaded = true;
+      console.log('✅ Configurações carregadas via HTTP');
     } catch (error) {
       console.error('⚠️ Erro ao carregar configurações:', error);
-      if (!this.dataLoaded) {
+      // 👉 Não sobrescreva nada se já havia dados (evita flick)
+      if (!this.dataLoaded && !this.lastGoodSettings) {
         this.applyRoomSettings({
           divisionType: 'consumption',
           showQRCode: true,
           pizzas: [],
           globalSlices: {}
         });
+      } else {
+        console.log('↩️ Mantendo último estado bom; ignorando fallback para evitar flick.');
       }
     }
   }
 
-  // Aplicar configurações
+  // ----------------- MERGE SEGURO DE SETTINGS -----------------
+  // Conta total de fatias em um mapa globalSlices
+  private countTotalSlices(slices: GlobalSliceData | undefined | null): number {
+    if (!slices) return 0;
+    let sum = 0;
+    for (const p in slices) {
+      const users = slices[p];
+      for (const u in users) sum += users[u] || 0;
+    }
+    return sum;
+  }
+
+  // Aplica settings sem perder fatias válidas: só troca globalSlices se vier algo não-vazio e não for mais antigo
+  private applySettingsMerge(incoming: any, source: string, tsHint?: number) {
+    const incomingSlices: GlobalSliceData | undefined = incoming?.globalSlices;
+    const incomingTs = (incoming?.lastUpdated ?? incoming?.timestamp ?? tsHint ?? 0) as number;
+
+    const currentTotal = this.countTotalSlices(this.globalSliceData);
+    const incomingTotal = this.countTotalSlices(incomingSlices);
+
+    let useIncomingSlices = true;
+
+    if (!incomingSlices || Object.keys(incomingSlices).length === 0) {
+      // não use fatias vazias se já temos algo
+      if (currentTotal > 0) {
+        useIncomingSlices = false;
+        console.log(`↩️ Ignorando globalSlices vazio de ${source}. Mantendo dados atuais (total=${currentTotal}).`);
+      }
+    } else {
+      // se temos timestamp local e o incoming parecer mais antigo, ignore
+      if (this.lastSlicesUpdateTs && incomingTs && incomingTs < this.lastSlicesUpdateTs) {
+        useIncomingSlices = false;
+        console.log(`↩️ Ignorando globalSlices de ${source} por ser antigo. incomingTs=${incomingTs} < lastTs=${this.lastSlicesUpdateTs}`);
+      }
+    }
+
+    // aplica demais campos (pizzas, flags, etc)
+    this.roomSettings = { ...this.roomSettings, ...(incoming || {}) };
+
+    // aplica pizzas
+    this.pizzasList = this.roomSettings.pizzas || this.pizzasList;
+
+    // aplica/ preserva globalSlices
+    if (useIncomingSlices) {
+      this.globalSliceData = incomingSlices || {};
+      if (incomingTs) {
+        this.lastSlicesUpdateTs = Math.max(this.lastSlicesUpdateTs, incomingTs);
+      }
+      console.log(`⬇️ Aplicando globalSlices de ${source} (incomingTotal=${incomingTotal}, ts=${incomingTs || 'n/d'}).`);
+    } else {
+      // preserva o atual e reflete nos settings
+      this.roomSettings.globalSlices = this.globalSliceData;
+    }
+
+    this.originalSettings = { ...this.roomSettings };
+    this.lastGoodSettings = { ...this.roomSettings };
+
+    this.recalculateUserSlices();
+    this.settingsChanged = false;
+    this.saveLocalBackup();
+    this.cdr.detectChanges();
+
+    console.log('✅ Configurações aplicadas (merge seguro):', {
+      pizzas: this.pizzasList.length,
+      fatias: Object.keys(this.globalSliceData).length
+    });
+  }
+  // ------------------------------------------------------------
+
+  // Aplicar configurações (uso interno/HTTP inicial)
   private applyRoomSettings(settings: any) {
-    this.roomSettings = settings;
-    this.originalSettings = { ...settings };
-    this.pizzasList = settings.pizzas || [];
-    this.globalSliceData = settings.globalSlices || {};
+    this.roomSettings = settings || {};
+    this.originalSettings = { ...this.roomSettings };
+    this.pizzasList = this.roomSettings.pizzas || [];
+    this.globalSliceData = this.roomSettings.globalSlices || {};
+
+    // snapshot bom para evitar zeradas indevidas
+    this.lastGoodSettings = { ...this.roomSettings };
 
     this.recalculateUserSlices();
     this.settingsChanged = false;
@@ -535,8 +620,8 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
     let totalSlices = 0;
 
     for (const pizzaIndex in this.globalSliceData) {
-      if (this.globalSliceData[pizzaIndex][this.nome]) {
-        const slices = this.globalSliceData[pizzaIndex][this.nome];
+      if (this.globalSliceData[pizzaIndex][this.cpf]) {
+        const slices = this.globalSliceData[pizzaIndex][this.cpf];
         this.userSliceData[parseInt(pizzaIndex)] = slices;
         totalSlices += slices;
       }
@@ -544,7 +629,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
 
     this.pizzaSlices = totalSlices;
 
-    const me = this.participants.find(p => p.author === this.nome);
+    const me = this.participants.find(p => p.author === this.cpf);
     if (me) {
       me.pizza = this.pizzaSlices;
     }
@@ -589,7 +674,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
           this.socketService.emit('updateGlobalSlices', {
             roomId: this.roomId,
             globalSlices: this.globalSliceData,
-            updatedBy: this.nome,
+            updatedBy: this.cpf,
             timestamp: Date.now(),
             autoSync: true
           });
@@ -622,7 +707,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
             this.updateParticipantList(message);
             this.saveLocalBackup(); // Salvar backup a cada mudança
 
-            if (message.author === this.nome) {
+            if (message.author === this.cpf) {
               this.pizzaSlices = message.pizza;
               if (message.isHost !== undefined) {
                 this.isHost = message.isHost;
@@ -662,7 +747,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
             console.log('🏠 Entrada na sala confirmada');
             this.participants = data.participants || [];
 
-            const currentUser = this.participants.find(p => p.author === this.nome);
+            const currentUser = this.participants.find(p => p.author === this.cpf);
             if (currentUser) {
               this.isHost = currentUser.isHost || false;
               this.pizzaSlices = currentUser.pizza || 0;
@@ -696,8 +781,11 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
         this.ngZone.run(() => {
           if (data.roomId === this.roomId) {
             console.log('⚙️ Configurações atualizadas via socket');
-            this.applyRoomSettings(data.settings);
+            this.applySettingsMerge(data.settings, 'roomSettingsUpdated', data?.timestamp);
             this.showSettingsUpdateMessage(`Configurações atualizadas por ${data.updatedBy}`);
+
+            // 👉 A partir de agora, não use mais HTTP/SOCKET request como fonte de verdade
+            this.disableHttpReload = true;
           }
         });
       })
@@ -707,25 +795,33 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
     this.subscriptions.add(
       this.socketService.listen('globalSlicesUpdated').subscribe((data: any) => {
         this.ngZone.run(() => {
-          if (data.roomId === this.roomId && data.updatedBy !== this.nome) {
-            if (!data.autoSync) {
-              console.log('📡 Fatias atualizadas por:', data.updatedBy);
+          if (data.roomId === this.roomId) {
+            this.lastSyncTime = new Date();
+
+            // atualiza timestamp local de última atualização
+            if (data?.timestamp) {
+              this.lastSlicesUpdateTs = Math.max(this.lastSlicesUpdateTs, data.timestamp);
             }
 
-            this.lastSyncTime = new Date();
             this.globalSliceData = data.globalSlices;
             this.roomSettings.globalSlices = data.globalSlices;
 
             if (!data.slicesOnly && data.settings) {
-              this.applyRoomSettings(data.settings);
+              // merge seguro caso venha settings juntos
+              this.applySettingsMerge(data.settings, 'globalSlicesUpdated(settings)', data?.timestamp);
             } else {
               this.recalculateUserSlices();
+              // snapshot bom atualizado mesmo sem settings completos
+              this.lastGoodSettings = { ...this.roomSettings };
             }
 
-            // Atualizar todos os participantes
+            // Atualiza o total de TODOS
             this.participants.forEach(participant => {
               participant.pizza = this.getUserTotalSlicesForParticipant(participant.author);
             });
+
+            // 👉 Após primeira boa atualização do socket, desligamos reloads
+            this.disableHttpReload = true;
 
             this.saveLocalBackup();
             this.cdr.detectChanges();
@@ -754,7 +850,10 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
         this.ngZone.run(() => {
           if (data.roomId === this.roomId) {
             console.log('⚙️ Configurações recebidas via socket');
-            this.applyRoomSettings(data.settings);
+            // ⚠️ merge seguro (NÃO sobrescrever com globalSlices vazio/stale)
+            this.applySettingsMerge(data.settings, 'roomSettingsResponse', data?.settings?.lastUpdated);
+            // 👉 socket entregou settings; desliga reload HTTP/SOCKET
+            this.disableHttpReload = true;
           }
         });
       })
@@ -838,8 +937,11 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
-      this.socketService.joinRoom(this.roomId, this.cpf);
-      await this.loadRoomSettingsFromFirebase();
+      this.socketService.joinRoom(this.roomId, this.cpf, this.nome);
+      // somente se não estiver desabilitado
+      if (!this.disableHttpReload) {
+        await this.loadRoomSettingsFromFirebase();
+      }
 
       this.isConnected = true;
       this.connectionAttempts = 0;
@@ -976,20 +1078,14 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
     }
     this.userSliceData[pizzaIndex]++;
 
-    if (!this.globalSliceData[pizzaIndex]) {
-      this.globalSliceData[pizzaIndex] = {};
-    }
-    if (!this.globalSliceData[pizzaIndex][this.nome]) {
-      this.globalSliceData[pizzaIndex][this.nome] = 0;
-    }
-    this.globalSliceData[pizzaIndex][this.nome]++;
+    if (!this.globalSliceData[pizzaIndex]) this.globalSliceData[pizzaIndex] = {};
+    if (!this.globalSliceData[pizzaIndex][this.cpf]) this.globalSliceData[pizzaIndex][this.cpf] = 0;
+    this.globalSliceData[pizzaIndex][this.cpf]++;
 
     this.syncSliceDataOnly();
     this.updateUserTotalSlices();
     this.triggerPulse();
     this.saveLocalBackup();
-
-    
   }
 
   removeSliceFromPizza(pizzaIndex: number) {
@@ -1003,10 +1099,10 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
       delete this.userSliceData[pizzaIndex];
     }
 
-    if (this.globalSliceData[pizzaIndex] && this.globalSliceData[pizzaIndex][this.nome]) {
-      this.globalSliceData[pizzaIndex][this.nome]--;
-      if (this.globalSliceData[pizzaIndex][this.nome] <= 0) {
-        delete this.globalSliceData[pizzaIndex][this.nome];
+    if (this.globalSliceData[pizzaIndex] && this.globalSliceData[pizzaIndex][this.cpf]) {
+      this.globalSliceData[pizzaIndex][this.cpf]--;
+      if (this.globalSliceData[pizzaIndex][this.cpf] <= 0) {
+        delete this.globalSliceData[pizzaIndex][this.cpf];
         if (Object.keys(this.globalSliceData[pizzaIndex]).length === 0) {
           delete this.globalSliceData[pizzaIndex];
         }
@@ -1042,7 +1138,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
       roomId: this.roomId,
       globalSlices: this.globalSliceData,
       settings: this.roomSettings,
-      updatedBy: this.nome,
+      updatedBy: this.cpf,
       timestamp: Date.now()
     });
 
@@ -1050,7 +1146,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
       this.socketService.emit('updateRoomSettings', {
         roomId: this.roomId,
         settings: this.roomSettings,
-        updatedBy: this.nome
+        updatedBy: this.cpf
       });
     }
 
@@ -1062,13 +1158,17 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
     this.lastSyncTime = new Date();
     this.roomSettings.globalSlices = this.globalSliceData;
 
+    const ts = Date.now();
     this.socketService.emit('updateGlobalSlices', {
       roomId: this.roomId,
       globalSlices: this.globalSliceData,
-      updatedBy: this.nome,
-      timestamp: Date.now(),
+      updatedBy: this.cpf,
+      timestamp: ts,
       slicesOnly: true
     });
+
+    // atualiza nosso lastSlicesUpdateTs localmente também
+    this.lastSlicesUpdateTs = Math.max(this.lastSlicesUpdateTs, ts);
 
     setTimeout(() => {
       this.isSyncing = false;
@@ -1090,7 +1190,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
     const newTotal = this.getTotalUserSlices();
     this.pizzaSlices = newTotal;
 
-    const me = this.participants.find(p => p.author === this.nome);
+    const me = this.participants.find(p => p.author === this.cpf);
     if (me) {
       me.pizza = this.pizzaSlices;
     }
@@ -1119,7 +1219,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
     this.pizzaSlices = 0;
     this.updateRoomSettings();
     this.syncGlobalSliceData();
-    this.socketService.sendMessage(this.nome, 0, this.roomId);
+    this.socketService.sendMessage(this.cpf, 0, this.roomId);
 
     this.presentAlert('Reset Completo', 'Todas as fatias foram resetadas.');
   }
@@ -1197,7 +1297,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
       this.socketService.emit('updateRoomSettings', {
         roomId: this.roomId,
         settings: this.roomSettings,
-        updatedBy: this.nome
+        updatedBy: this.cpf
       });
 
       this.originalSettings = { ...this.roomSettings };
@@ -1214,21 +1314,25 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
   private async saveSettingsToServer(settings?: any): Promise<void> {
     const settingsToSave = settings || this.roomSettings;
 
-    const response = await fetch('https://87138696a2ea.ngrok-free.app/api/room-settings', {
+    const res = await fetch(`${this.API_BASE}/api/room-settings?ngrok-skip-browser-warning=true`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+        'Accept': 'application/json'
       },
       body: JSON.stringify({
         ...settingsToSave,
         roomId: this.roomId,
         createdBy: this.cpf,
         createdAt: Date.now()
-      })
+      }),
+      cache: 'no-store'
     });
 
-    if (!response.ok) {
-      throw new Error('Erro ao salvar configurações');
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error(`Erro ao salvar configurações (status ${res.status}): ${t.slice(0, 120)}`);
     }
   }
 
@@ -1248,7 +1352,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
       this.participants.push({ ...newMessage });
     }
 
-    if (newMessage.author === this.nome) {
+    if (newMessage.author === this.cpf) {
       this.pizzaSlices = newMessage.pizza;
       if (newMessage.isHost !== undefined) {
         this.isHost = newMessage.isHost;
@@ -1353,21 +1457,24 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
 
   private async confirmEndSession() {
     try {
-      const response = await fetch(`https://87138696a2ea.ngrok-free.app/api/end-room/${this.roomId}`, {
+      const response = await fetch(`${this.API_BASE}/api/end-room/${this.roomId}?ngrok-skip-browser-warning=true`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({
           cpf: this.cpf,
           endedBy: this.nome
-        })
+        }),
+        cache: 'no-store'
       });
 
       if (response.ok) {
         this.socketService.emit('roomEnded', {
           roomId: this.roomId,
-          endedBy: this.nome,
+          endedBy: this.cpf,
           timestamp: Date.now()
         });
 
@@ -1397,16 +1504,19 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
             text: 'Sim',
             handler: async () => {
               try {
-                const response = await fetch('https://87138696a2ea.ngrok-free.app/api/set-host', {
+                const response = await fetch('https://b68ac0bdef86.ngrok-free.app/api/set-host?ngrok-skip-browser-warning=true', {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true',
+                    'Accept': 'application/json'
                   },
                   body: JSON.stringify({
                     cpf: this.cpf,
                     roomId: this.roomId,
                     nome: this.nome
-                  })
+                  }),
+                  cache: 'no-store'
                 });
 
                 if (response.ok) {

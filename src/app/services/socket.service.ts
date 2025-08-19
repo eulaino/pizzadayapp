@@ -16,10 +16,10 @@ export interface Participant {
 })
 export class SocketService {
   private socket: Socket;
-  private readonly SOCKET_URL = 'https://87138696a2ea.ngrok-free.app';
+  private readonly SOCKET_URL = 'https://b68ac0bdef86.ngrok-free.app';
   public currentRoomId: string | null = null;
   public currentUsername: string | null = null;
-  
+
   public getSocket(): Socket {
     return this.socket;
   }
@@ -28,7 +28,7 @@ export class SocketService {
     this.socket = io(this.SOCKET_URL, {
       transports: ['websocket']
     });
-    
+
     console.log('Tentando conectar ao socket em:', this.SOCKET_URL);
 
     this.socket.on('connect', () => {
@@ -56,7 +56,8 @@ export class SocketService {
     const usernameToCheck = username || this.currentUsername;
     if (usernameToCheck) {
       console.log(`[SocketService] Solicitando verificação de host: Sala=${roomId}, Nome=${usernameToCheck}`);
-      this.emit('checkIfHost', { roomId, username: usernameToCheck });
+      // Envia ambos os campos para compatibilidade com o servidor
+      this.emit('checkIfHost', { roomId, username: usernameToCheck, userId: usernameToCheck });
     } else {
       console.warn('[SocketService] Username não disponível para verificação de host');
     }
@@ -72,24 +73,23 @@ export class SocketService {
   checkCurrentUserHost(roomId: string) {
     if (this.currentUsername) {
       console.log(`[SocketService] Verificando se ${this.currentUsername} é host da sala ${roomId}`);
-      this.emit('checkCurrentUserHost', { roomId, username: this.currentUsername });
+      // Envia ambos os campos para compatibilidade com o servidor
+      this.emit('checkCurrentUserHost', { roomId, username: this.currentUsername, userId: this.currentUsername });
     }
   }
 
-  joinRoom(roomId: string, cpf: string) {
+  joinRoom(roomId: string, cpf: string, displayName?: string) {
     if (this.currentRoomId === roomId && this.currentUsername === cpf) {
-      console.log(`[SocketService] Já conectado à sala ${roomId} como ${cpf}, verificando status...`);
       this.checkCurrentUserHost(roomId);
       return;
     }
-
     this.currentRoomId = roomId;
     this.currentUsername = cpf;
 
-    console.log(`[SocketService] Enviando joinRoom: Sala=${roomId}, CPF=${cpf}`);
-    this.emit('joinRoom', { roomId, username: cpf });
+    // Envia todos os identificadores para evitar incompatibilidades do backend
+    this.emit('joinRoom', { roomId, username: cpf, userId: cpf, cpf, displayName: displayName || cpf });
   }
-  
+
   sendMessage(author: string, pizza: number, roomId: string) {
     console.log(`[SocketService] Tentando sendMessage: Autor=${author}, Pizza=${pizza}, Sala=${roomId}`);
     this.emit('sendMessage', { author, pizza, roomId });

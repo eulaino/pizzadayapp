@@ -5,7 +5,7 @@ import { HttpClient } from '@angular/common/http';
   providedIn: 'root'
 })
 export class AuthService {
-  private readonly API_URL = 'https://87138696a2ea.ngrok-free.app'; // ngrok ou IP local
+  private readonly API_URL = 'https://b68ac0bdef86.ngrok-free.app'; // ngrok ou IP local
 
   constructor(private http: HttpClient) {}
 
