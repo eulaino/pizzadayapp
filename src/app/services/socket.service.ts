@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 // Interface para um participante da sala.
 export interface Participant {
   author: string;
+  cpf?: string;
   pizza: number;
   isHost: boolean;
   roomId: string;
@@ -16,7 +17,7 @@ export interface Participant {
 })
 export class SocketService {
   private socket: Socket;
-  private readonly SOCKET_URL = 'https://b68ac0bdef86.ngrok-free.app';
+  private readonly SOCKET_URL = 'https://b2d0d865f0bd.ngrok-free.app';
   public currentRoomId: string | null = null;
   public currentUsername: string | null = null;
 

@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  private readonly API = 'https://b68ac0bdef86.ngrok-free.app/api'; // ou ngrok/IP
+  private readonly API = 'https://b2d0d865f0bd.ngrok-free.app/api'; // ou ngrok/IP
 
   constructor(private http: HttpClient) { }
 

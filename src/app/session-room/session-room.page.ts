@@ -188,7 +188,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
   // Backup local
   private localStorageKey: string = '';
 
-  private readonly API_BASE = 'https://b68ac0bdef86.ngrok-free.app';
+  private readonly API_BASE = 'https://b2d0d865f0bd.ngrok-free.app';
 
   // flags/estado para robustez do HTTP/SOCKET
   private disableHttpReload = false;            // desliga GET/REQUESTS depois que o socket já entregou settings atuais
@@ -240,22 +240,10 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
 
   // ============ MÉTODOS DE CÁLCULO MELHORADOS ============
 
-  getParticipantConsumptionValue(participantName: string): number {
-    let total = 0;
-
-    for (const pizzaIndex in this.globalSliceData) {
-      if (this.globalSliceData[pizzaIndex][participantName]) {
-        const pizza = this.pizzasList[parseInt(pizzaIndex)];
-        if (pizza) {
-          const sliceValue = pizza.valor / pizza.fatias;
-          const userSlices = this.globalSliceData[pizzaIndex][participantName];
-          total += sliceValue * userSlices;
-        }
-      }
-    }
-
-    return total;
-  }
+getParticipantConsumptionValue(participantName: string): number {
+  const slices = this.getUserTotalSlicesForParticipant(participantName);
+  return slices * this.getUnifiedSlicePrice();
+}
 
   ngOnInit() {
     console.log('🚀 Inicializando sessão robusta:', {
@@ -816,9 +804,10 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
             }
 
             // Atualiza o total de TODOS
-            this.participants.forEach(participant => {
-              participant.pizza = this.getUserTotalSlicesForParticipant(participant.author);
+            this.participants.forEach(p => {
+              p.pizza = this.getSlicesForParticipant(p); // ou getUserTotalSlicesForParticipant(p)
             });
+
 
             // 👉 Após primeira boa atualização do socket, desligamos reloads
             this.disableHttpReload = true;
@@ -979,14 +968,77 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
     return this.pizzasList.reduce((sum, pizza, index) => sum + this.getAvailableSlices(index), 0);
   }
 
-  getUserTotalSlicesForParticipant(username: string): number {
+  getUserTotalSlicesForParticipant(user: Participant | string): number {
+    const key = typeof user === 'string' ? user : this.participantKey(user);
     let total = 0;
-    for (const pizzaIndex in this.globalSliceData) {
-      if (this.globalSliceData[pizzaIndex][username]) {
-        total += this.globalSliceData[pizzaIndex][username];
-      }
+    for (const idx in this.globalSliceData) {
+      const users = this.globalSliceData[idx] || {};
+      total += users[key] || 0;
     }
     return total;
+  }
+
+  // ===== POOL DE FATIAS =====
+
+  // preço médio por fatia = total das pizzas / total de fatias
+  getUnifiedSlicePrice(): number {
+    const totalValue = this.getTotalPizzasValue();
+    const totalSlices = this.getTotalSlices();
+    return totalSlices > 0 ? totalValue / totalSlices : 0;
+  }
+
+  // adiciona 1 fatia do pool (pega da primeira pizza com fatia disponível)
+  addSliceFromPool() {
+    if (this.getTotalAvailableSlices() <= 0) {
+      this.presentAlert('Esgotado', 'Não há mais fatias disponíveis.');
+      return;
+    }
+
+    for (let i = 0; i < this.pizzasList.length; i++) {
+      if (this.getAvailableSlices(i) > 0) {
+        if (!this.userSliceData[i]) this.userSliceData[i] = 0;
+        this.userSliceData[i]++;
+
+        if (!this.globalSliceData[i]) this.globalSliceData[i] = {};
+        if (!this.globalSliceData[i][this.cpf]) this.globalSliceData[i][this.cpf] = 0;
+        this.globalSliceData[i][this.cpf]++;
+
+        this.syncSliceDataOnly();
+        this.updateUserTotalSlices();
+        this.triggerPulse();
+        this.saveLocalBackup();
+        return;
+      }
+    }
+  }
+
+  // remove 1 fatia do pool (da última pizza em que o usuário tem fatia)
+  removeSliceFromPool() {
+    if (this.getTotalUserSlices() <= 0) {
+      this.presentAlert('Ops!', 'Você não tem fatias para remover.');
+      return;
+    }
+
+    for (let i = this.pizzasList.length - 1; i >= 0; i--) {
+      if (this.userSliceData[i] && this.userSliceData[i] > 0) {
+        this.userSliceData[i]--;
+        if (this.userSliceData[i] <= 0) delete this.userSliceData[i];
+
+        if (this.globalSliceData[i] && this.globalSliceData[i][this.cpf]) {
+          this.globalSliceData[i][this.cpf]--;
+          if (this.globalSliceData[i][this.cpf] <= 0) {
+            delete this.globalSliceData[i][this.cpf];
+            if (Object.keys(this.globalSliceData[i]).length === 0) delete this.globalSliceData[i];
+          }
+        }
+
+        this.syncSliceDataOnly();
+        this.updateUserTotalSlices();
+        this.triggerPulse();
+        this.saveLocalBackup();
+        return;
+      }
+    }
   }
 
   togglePizzaPanel() {
@@ -1219,7 +1271,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
     this.pizzaSlices = 0;
     this.updateRoomSettings();
     this.syncGlobalSliceData();
-    this.socketService.sendMessage(this.cpf, 0, this.roomId);
+    this.socketService.sendMessage(this.nome, 0, this.roomId);
 
     this.presentAlert('Reset Completo', 'Todas as fatias foram resetadas.');
   }
@@ -1248,18 +1300,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
   }
 
   getConsumptionShare(): number {
-    let total = 0;
-
-    for (const pizzaIndex in this.userSliceData) {
-      const pizza = this.pizzasList[parseInt(pizzaIndex)];
-      if (pizza) {
-        const sliceValue = pizza.valor / pizza.fatias;
-        const userSlices = this.userSliceData[parseInt(pizzaIndex)];
-        total += sliceValue * userSlices;
-      }
-    }
-
-    return total;
+    return this.getTotalUserSlices() * this.getUnifiedSlicePrice();
   }
 
   getFormattedShare(): string {
@@ -1345,20 +1386,25 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
   }
 
   updateParticipantList(newMessage: Participant) {
-    const index = this.participants.findIndex(p => p.author === newMessage.author);
-    if (index > -1) {
-      this.participants[index] = { ...newMessage };
+    const idx = this.participants.findIndex(
+      p => p.author === newMessage.author || (p as any).cpf === (newMessage as any).cpf
+    );
+
+    if (idx > -1) {
+      this.participants[idx] = { ...this.participants[idx], ...newMessage };
     } else {
-      this.participants.push({ ...newMessage });
+
+      const ensured: any = { ...newMessage };
+      if (!('cpf' in ensured) || !ensured.cpf) ensured.cpf = newMessage.author;
+      this.participants.push(ensured);
     }
 
     if (newMessage.author === this.cpf) {
       this.pizzaSlices = newMessage.pizza;
-      if (newMessage.isHost !== undefined) {
-        this.isHost = newMessage.isHost;
-      }
+      if (newMessage.isHost !== undefined) this.isHost = newMessage.isHost;
     }
 
+    // mantém a ordenação
     this.participants.sort((a, b) => {
       if (a.isHost && !b.isHost) return -1;
       if (!a.isHost && b.isHost) return 1;
@@ -1425,6 +1471,89 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
 
     this.selectedParticipantToRemove = '';
     this.cdr.detectChanges();
+  }
+
+  // acabou tudo?
+  allSlicesConsumed(): boolean {
+    if (!this.pizzasList?.length) return false;
+    return this.getTotalAvailableSlices() === 0;
+  }
+
+  // chave (cpf ou author) para ler globalSliceData
+  private participantKey(p: Participant): string {
+    return (p as any).cpf || p.author;
+  }
+
+  // total de fatias de um participante (usando cpf se existir)
+  getSlicesForParticipant(p: Participant): number {
+    const key = this.participantKey(p);
+    let total = 0;
+    for (const idx in this.globalSliceData) {
+      const users = this.globalSliceData[idx] || {};
+      total += users[key] || 0;
+    }
+    return total;
+  }
+
+  // valor por consumo de um participante
+getParticipantConsumptionValueSafe(p: Participant): number {
+  return this.getParticipantConsumptionValue(this.participantKey(p));
+}
+
+  // chave PIX do anfitrião (opcional)
+  hostPixKey(): string {
+    return (this.roomSettings?.pixKey || this.roomSettings?.hostPixKey || '').trim();
+  }
+
+  // copiar cobrança (1 pessoa) para a área de transferência
+  async copyChargeForParticipant(p: Participant) {
+    const amount = this.getParticipantConsumptionValueSafe(p);
+    const valueBRL = amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const pixKey = this.hostPixKey();
+
+    const lines = [
+      '🍕 PIZZA DAY - Pagamento',
+      `Participante: ${p.author}`,
+      `Sala: ${this.roomId}`,
+      `Valor: ${valueBRL}`,
+    ];
+    if (pixKey) lines.push(`PIX do anfitrião: ${pixKey}`);
+
+    const text = lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    this.presentAlert('Copiado!', 'Cobrança copiada para a área de transferência.');
+  }
+
+  // copiar TODAS as cobranças
+  async copyAllCharges() {
+    const header = [`🍕 PIZZA DAY - Cobranças (Sala ${this.roomId})`];
+    const pixKey = this.hostPixKey();
+    if (pixKey) header.push(`PIX do anfitrião: ${pixKey}`);
+    header.push('');
+
+    const lines = this.participants.map(p => {
+      const slices = this.getSlicesForParticipant(p);
+      const amount = this.getParticipantConsumptionValueSafe(p);
+      const valueBRL = amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      return `${p.author} — ${slices} fatias — ${valueBRL}`;
+    });
+
+    const text = [...header, ...lines].join('\n');
+
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    this.presentAlert('Copiado!', 'Lista de cobranças copiada para a área de transferência.');
   }
 
   // ============ CONTROLE DE ENCERRAMENTO ============
@@ -1504,7 +1633,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
             text: 'Sim',
             handler: async () => {
               try {
-                const response = await fetch('https://b68ac0bdef86.ngrok-free.app/api/set-host?ngrok-skip-browser-warning=true', {
+                const response = await fetch('https://b2d0d865f0bd.ngrok-free.app/api/set-host?ngrok-skip-browser-warning=true', {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
