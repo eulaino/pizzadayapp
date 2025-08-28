@@ -88,7 +88,13 @@ interface LocalBackupData {
   pizzasList: Pizza[];
   userSliceData: UserSliceData;
   globalSliceData: GlobalSliceData;
+  refrigerantesList: Refrigerante[];
   timestamp: number;
+}
+
+interface Refrigerante {
+  nome: string;
+  valor: number;
 }
 
 @Component({
@@ -141,6 +147,8 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
   barcodeFormats = [BarcodeFormat.QR_CODE];
   selectedParticipantToRemove: string = '';
   pulse = false;
+  refrigerantesList: Refrigerante[] = [];
+  novoRefrigerante: Refrigerante = { nome: '', valor: 0 };
 
   private isInitialized = false;
   private dataLoaded = false;
@@ -160,7 +168,8 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
     divisionType: 'consumption',
     showQRCode: true,
     pizzas: [],
-    globalSlices: {}
+    globalSlices: {},
+    refrigerantes: []
   };
 
   // UI Estado
@@ -188,7 +197,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
   // Backup local
   private localStorageKey: string = '';
 
-  private readonly API_BASE = 'https://b2d0d865f0bd.ngrok-free.app';
+  private readonly API_BASE = 'https://eb0a1034471b.ngrok-free.app';
 
   // flags/estado para robustez do HTTP/SOCKET
   private disableHttpReload = false;            // desliga GET/REQUESTS depois que o socket já entregou settings atuais
@@ -227,6 +236,7 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
         this.originalSettings = { ...this.roomSettings };
         this.pizzasList = this.roomSettings.pizzas || [];
         this.globalSliceData = this.roomSettings.globalSlices || {};
+        this.refrigerantesList = (this.roomSettings.refrigerantes || this.roomSettings.beverages || []);
         this.lastGoodSettings = { ...this.roomSettings }; // guarda um snapshot bom
       }
 
@@ -240,10 +250,10 @@ export class SessionRoomPage implements OnInit, OnDestroy, AfterViewInit {
 
   // ============ MÉTODOS DE CÁLCULO MELHORADOS ============
 
-getParticipantConsumptionValue(participantName: string): number {
-  const slices = this.getUserTotalSlicesForParticipant(participantName);
-  return slices * this.getUnifiedSlicePrice();
-}
+  getParticipantConsumptionValue(participantName: string): number {
+    const slices = this.getUserTotalSlicesForParticipant(participantName);
+    return slices * this.getUnifiedSlicePrice();
+  }
 
   ngOnInit() {
     console.log('🚀 Inicializando sessão robusta:', {
@@ -283,6 +293,7 @@ getParticipantConsumptionValue(participantName: string): number {
         pizzasList: this.pizzasList,
         userSliceData: this.userSliceData,
         globalSliceData: this.globalSliceData,
+        refrigerantesList: this.refrigerantesList,
         timestamp: Date.now()
       };
 
@@ -309,6 +320,7 @@ getParticipantConsumptionValue(participantName: string): number {
           this.pizzasList = backup.pizzasList || [];
           this.userSliceData = backup.userSliceData || {};
           this.globalSliceData = backup.globalSliceData || {};
+          this.refrigerantesList = backup.refrigerantesList || [];
           this.isHost = backup.isHost || false;
 
           this.originalSettings = { ...this.roomSettings };
@@ -551,6 +563,9 @@ getParticipantConsumptionValue(participantName: string): number {
     // aplica pizzas
     this.pizzasList = this.roomSettings.pizzas || this.pizzasList;
 
+    // aplica refrigerante
+    this.refrigerantesList = this.roomSettings.refrigerantes || this.roomSettings.beverages || [];
+
     // aplica/ preserva globalSlices
     if (useIncomingSlices) {
       this.globalSliceData = incomingSlices || {};
@@ -584,6 +599,7 @@ getParticipantConsumptionValue(participantName: string): number {
     this.originalSettings = { ...this.roomSettings };
     this.pizzasList = this.roomSettings.pizzas || [];
     this.globalSliceData = this.roomSettings.globalSlices || {};
+    this.refrigerantesList = this.roomSettings.refrigerantes || this.roomSettings.beverages || [];
 
     // snapshot bom para evitar zeradas indevidas
     this.lastGoodSettings = { ...this.roomSettings };
@@ -982,7 +998,7 @@ getParticipantConsumptionValue(participantName: string): number {
 
   // preço médio por fatia = total das pizzas / total de fatias
   getUnifiedSlicePrice(): number {
-    const totalValue = this.getTotalPizzasValue();
+    const totalValue = this.getTotalPizzasValue() + this.getTotalRefrigerantesValue();
     const totalSlices = this.getTotalSlices();
     return totalSlices > 0 ? totalValue / totalSlices : 0;
   }
@@ -1255,6 +1271,7 @@ getParticipantConsumptionValue(participantName: string): number {
   updateRoomSettings() {
     this.roomSettings.pizzas = this.pizzasList;
     this.roomSettings.globalSlices = this.globalSliceData;
+    this.roomSettings.refrigerantes = this.refrigerantesList;
     this.saveLocalBackup();
   }
 
@@ -1276,6 +1293,40 @@ getParticipantConsumptionValue(participantName: string): number {
     this.presentAlert('Reset Completo', 'Todas as fatias foram resetadas.');
   }
 
+  // ===== Refrigerantes =====
+adicionarRefrigerante() {
+  if (!this.novoRefrigerante.nome || !this.novoRefrigerante.valor) {
+    this.presentAlert('Erro', 'Informe nome e valor do refrigerante.');
+    return;
+  }
+  this.refrigerantesList.push({ ...this.novoRefrigerante });
+  this.novoRefrigerante = { nome: '', valor: 0 };
+
+  this.updateRoomSettings();
+  this.onSettingsChange();
+
+  this.syncGlobalSliceData();
+
+  this.saveLocalBackup();
+  this.cdr.detectChanges();
+}
+
+removerRefrigerante(index: number) {
+  this.refrigerantesList.splice(index, 1);
+
+  this.updateRoomSettings();
+  this.onSettingsChange();
+
+  this.syncGlobalSliceData();
+
+  this.saveLocalBackup();
+  this.cdr.detectChanges();
+}
+
+  getTotalRefrigerantesValue(): number {
+    return this.refrigerantesList.reduce((sum, r) => sum + (Number(r.valor) || 0), 0);
+  }
+
   // ============ MÉTODOS DE CÁLCULO ============
 
   getTotalPizzasValue(): number {
@@ -1295,7 +1346,7 @@ getParticipantConsumptionValue(participantName: string): number {
   }
 
   getEqualShare(): number {
-    const totalValue = this.getTotalPizzasValue();
+    const totalValue = this.getTotalPizzasValue() + this.getTotalRefrigerantesValue();
     return this.participants.length > 0 ? totalValue / this.participants.length : 0;
   }
 
@@ -1496,9 +1547,9 @@ getParticipantConsumptionValue(participantName: string): number {
   }
 
   // valor por consumo de um participante
-getParticipantConsumptionValueSafe(p: Participant): number {
-  return this.getParticipantConsumptionValue(this.participantKey(p));
-}
+  getParticipantConsumptionValueSafe(p: Participant): number {
+    return this.getParticipantConsumptionValue(this.participantKey(p));
+  }
 
   // chave PIX do anfitrião (opcional)
   hostPixKey(): string {
@@ -1633,7 +1684,7 @@ getParticipantConsumptionValueSafe(p: Participant): number {
             text: 'Sim',
             handler: async () => {
               try {
-                const response = await fetch('https://b2d0d865f0bd.ngrok-free.app/api/set-host?ngrok-skip-browser-warning=true', {
+                const response = await fetch('https://eb0a1034471b.ngrok-free.app/api/set-host?ngrok-skip-browser-warning=true', {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',

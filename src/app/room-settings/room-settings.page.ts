@@ -210,7 +210,7 @@ export class RoomSettingsPage implements OnInit, OnDestroy {
   private async saveRoomSettings(settings: RoomSettings): Promise<void> {
     return new Promise((resolve, reject) => {
       // Fazer chamada HTTP para salvar no Firebase
-      fetch('https://b2d0d865f0bd.ngrok-free.app/api/room-settings', {
+      fetch('https://eb0a1034471b.ngrok-free.app/api/room-settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

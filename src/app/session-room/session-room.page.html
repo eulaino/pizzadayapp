@@ -94,35 +94,35 @@
 
       <!-- Card de Consumo (apenas se houver pizzas e divisão por consumo) -->
       <div *ngIf="pizzasList.length > 0 && roomSettings.divisionType === 'consumption'"
-     class="bg-white rounded-xl shadow-md overflow-hidden">
-  <div class="bg-gradient-to-r from-yellow-400 to-orange-500 p-4">
-    <h3 class="text-white font-bold text-lg">🍕 Suas Fatias</h3>
-    <p class="text-yellow-100 text-sm">Toque para adicionar</p>
-  </div>
+        class="bg-white rounded-xl shadow-md overflow-hidden">
+        <div class="bg-gradient-to-r from-yellow-400 to-orange-500 p-4">
+          <h3 class="text-white font-bold text-lg">🍕 Suas Fatias</h3>
+          <p class="text-yellow-100 text-sm">Toque para adicionar</p>
+        </div>
 
-  <div class="p-4 space-y-3">
-    <div class="flex items-center justify-center gap-6">
+        <div class="p-4 space-y-3">
+          <div class="flex items-center justify-center gap-6">
 
-      <div class="text-center min-w-[40px]">
-        <div (click)="addSliceFromPool()"
-             class="pizza-count text-[5.5rem] font-bold text-orange-600 select-none cursor-pointer">
-          {{ getTotalUserSlices() }}
+            <div class="text-center min-w-[40px]">
+              <div (click)="addSliceFromPool()"
+                class="pizza-count text-[5.5rem] font-bold text-orange-600 select-none cursor-pointer">
+                {{ getTotalUserSlices() }}
+              </div>
+            </div>
+
+          </div>
+
+          <div class="text-center">
+            <div class="text-[1.1rem] font-semibold"
+              [class]="getTotalAvailableSlices() > 0 ? 'text-green-600' : 'text-red-500'">
+              {{ getTotalAvailableSlices() }} de {{ getTotalSlices() }} fatias disponíveis
+            </div>
+            <div class="text-sm text-gray-600">
+              Preço por fatia: {{ getUnifiedSlicePrice() | currency:'BRL':'symbol':'1.2-2' }}
+            </div>
+          </div>
         </div>
       </div>
-
-    </div>
-
-    <div class="text-center">
-      <div class="text-[1.1rem] font-semibold"
-           [class]="getTotalAvailableSlices() > 0 ? 'text-green-600' : 'text-red-500'">
-        {{ getTotalAvailableSlices() }} de {{ getTotalSlices() }} fatias disponíveis
-      </div>
-      <div class="text-sm text-gray-600">
-        Preço por fatia: {{ getUnifiedSlicePrice() | currency:'BRL':'symbol':'1.2-2' }}
-      </div>
-    </div>
-  </div>
-</div>
 
       <!-- Card de Divisão Igual -->
       <div *ngIf="roomSettings.divisionType === 'equal' && getTotalPizzasValue() > 0"
@@ -278,6 +278,44 @@
               <ion-icon name="add-circle" class="mr-2"></ion-icon>
               Adicionar Pizza
             </button>
+          </div>
+        </div>
+
+
+        <!-- Refrigerantes (apenas host) -->
+        <div *ngIf="isHost" class="bg-blue-50 p-4 rounded-lg mb-4">
+          <h4 class="font-bold text-gray-700 mb-3">🥤 Refrigerantes</h4>
+
+          <!-- Formulário adicionar -->
+          <div class="space-y-3">
+            <ion-item>
+              <ion-input [(ngModel)]="novoRefrigerante.nome" placeholder="Nome do refrigerante" type="text"></ion-input>
+            </ion-item>
+            <ion-item>
+              <ion-input [(ngModel)]="novoRefrigerante.valor" placeholder="Valor (R$)" type="number" min="0"
+                step="0.01"></ion-input>
+            </ion-item>
+            <button (click)="adicionarRefrigerante()" [disabled]="!novoRefrigerante.nome || !novoRefrigerante.valor"
+              class="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
+              Adicionar Refrigerante
+            </button>
+          </div>
+
+          <!-- Lista de refrigerantes -->
+          <div class="space-y-2 mt-4">
+            <div *ngFor="let r of refrigerantesList; let i = index"
+              class="bg-white p-3 rounded-md shadow-sm flex items-center justify-between">
+              <div>
+                <div class="font-medium text-gray-800">{{ r.nome }}</div>
+                <div class="text-sm text-gray-600">{{ r.valor | currency:'BRL':'symbol':'1.2-2' }}</div>
+              </div>
+              <button (click)="removerRefrigerante(i)" class="text-red-500 hover:text-red-700 p-2">
+                <ion-icon name="trash"></ion-icon>
+              </button>
+            </div>
+            <div *ngIf="refrigerantesList.length === 0" class="text-sm text-gray-600">
+              Nenhum refrigerante adicionado
+            </div>
           </div>
         </div>
 
@@ -463,9 +501,9 @@
                   <span *ngIf="p.author === nome" class="text-blue-600">(Você)</span>
                 </span>
                 <span class="font-medium">
-                  {{ roomSettings.divisionType === 'equal'
-                  ? (getEqualShare() | currency:'BRL':'symbol':'1.2-2')
-                  : (getParticipantConsumptionValueSafe(p) | currency:'BRL':'symbol':'1.2-2') }}
+                  {{ roomSettings.divisionType === 'equal' ?
+                  (getEqualShare() | currency:'BRL':'symbol':'1.2-2') :
+                  (getParticipantConsumptionValueSafe(p) | currency:'BRL':'symbol':'1.2-2') }}
                 </span>
               </div>
             </div>
@@ -496,7 +534,7 @@
           <!-- QR Code (apenas para hosts) -->
           <div *ngIf="isHost" class="text-center p-4 bg-gray-50 rounded-lg">
             <h4 class="font-bold text-gray-700 mb-3">📱 Compartilhar Sessão</h4>
-            <qrcode [qrdata]="'https://b2d0d865f0bd.ngrok-free.app/join/' + roomId" [width]="200"
+            <qrcode [qrdata]="'https://eb0a1034471b.ngrok-free.app/join/' + roomId" [width]="200"
               [errorCorrectionLevel]="'M'" class="mx-auto"></qrcode>
             <p class="text-sm text-gray-600 mt-3">Escaneie para entrar na sessão</p>
           </div>

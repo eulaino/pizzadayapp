@@ -17,7 +17,7 @@ export interface Participant {
 })
 export class SocketService {
   private socket: Socket;
-  private readonly SOCKET_URL = 'https://b2d0d865f0bd.ngrok-free.app';
+  private readonly SOCKET_URL = 'https://eb0a1034471b.ngrok-free.app';
   public currentRoomId: string | null = null;
   public currentUsername: string | null = null;
 
